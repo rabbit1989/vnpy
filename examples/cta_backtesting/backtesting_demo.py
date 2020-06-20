@@ -1,6 +1,6 @@
 from vnpy.app.cta_strategy.backtesting import BacktestingEngine, OptimizationSetting
-from vnpy.app.cta_strategy.strategies.atr_rsi_strategy import (
-    AtrRsiStrategy,
+from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import (
+    Etf50DeltaHedgeStrategy
 )
 from datetime import datetime
 
@@ -16,7 +16,7 @@ engine.set_parameters(
     pricetick=0.2,
     capital=1_000_000,
 )
-engine.add_strategy(AtrRsiStrategy, {})
+engine.add_strategy(Etf50DeltaHedgeStrategy, {})
 
 engine.load_data()
 engine.run_backtesting()
