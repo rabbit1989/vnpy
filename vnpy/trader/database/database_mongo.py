@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional, Sequence, List
 
 from mongoengine import DateTimeField, Document, FloatField, StringField, connect
-
+from mongoengine.context_managers import set_write_concern, switch_collection, switch_db
 from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import BarData, TickData
 
@@ -277,14 +277,15 @@ class MongoManager(BaseDatabaseManager):
         start: datetime,
         end: datetime,
     ) -> Sequence[BarData]:
-        s = DbBarData.objects(
-            symbol=symbol,
-            exchange=exchange.value,
-            interval=interval.value,
-            datetime__gte=start,
-            datetime__lte=end,
-        )
-        data = [db_bar.to_bar() for db_bar in s]
+        with switch_collection(DbBarData, symbol):
+            s = DbBarData.objects(
+                symbol=symbol,
+                exchange=exchange.value,
+                interval=interval.value,
+                datetime__gte=start,
+                datetime__lte=end,
+            )
+            data = [db_bar.to_bar() for db_bar in s]
         return data
 
     def load_tick_data(

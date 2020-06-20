@@ -38,7 +38,8 @@ SETTINGS: Dict[str, Any] = {
 }
 
 # Load global setting from json file.
-SETTING_FILENAME: str = "vt_setting.json"
+SETTING_FILENAME: str = "/Users/baige/code/git_repo/vnpy/examples/cta_backtesting/vt_setting.json"
+print('json setting: {}'.format(load_json(SETTING_FILENAME)))
 SETTINGS.update(load_json(SETTING_FILENAME))
 
 
