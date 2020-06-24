@@ -1,20 +1,32 @@
+from datetime import datetime
+
+
+from vnpy.app.cta_strategy.base import BacktestingMode
 from vnpy.app.cta_strategy.backtesting import BacktestingEngine, OptimizationSetting
 from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import (
     Etf50DeltaHedgeStrategy
 )
-from datetime import datetime
+
+
 
 engine = BacktestingEngine()
 engine.set_parameters(
-    vt_symbol="50etf.SSE",
+    configs = {
+        '50etf.SSE': {
+            'pricetick': 0.01
+        },
+        '50etf_option.SSE': {
+            'pricetick': 0.001
+        }
+    },
     interval="d",
-    start=datetime(2015, 1, 1),
+    start=datetime(2017, 12, 1),
     end=datetime(2020, 6, 30),
     rate=0.3/10000,
     slippage=0.2,
     size=300,
-    pricetick=0.2,
     capital=1_000_000,
+    mode=BacktestingMode.BAR
 )
 engine.add_strategy(Etf50DeltaHedgeStrategy, {})
 

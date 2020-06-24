@@ -8,6 +8,7 @@ from vnpy.app.cta_strategy import (
     BarGenerator,
     ArrayManager,
 )
+from vnpy.trader.object import OptionBarData
 
 
 class Etf50DeltaHedgeStrategy(CtaTemplate):
@@ -15,37 +16,13 @@ class Etf50DeltaHedgeStrategy(CtaTemplate):
 
     author = "用Python的交易员"
 
-    atr_length = 22
-    atr_ma_length = 10
-    rsi_length = 5
-    rsi_entry = 16
-    trailing_percent = 0.8
+
     fixed_size = 1
 
-    atr_value = 0
-    atr_ma = 0
-    rsi_value = 0
-    rsi_buy = 0
-    rsi_sell = 0
-    intra_trade_high = 0
-    intra_trade_low = 0
-
     parameters = [
-        "atr_length",
-        "atr_ma_length",
-        "rsi_length",
-        "rsi_entry",
-        "trailing_percent",
         "fixed_size"
     ]
     variables = [
-        "atr_value",
-        "atr_ma",
-        "rsi_value",
-        "rsi_buy",
-        "rsi_sell",
-        "intra_trade_high",
-        "intra_trade_low"
     ]
 
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
@@ -59,11 +36,6 @@ class Etf50DeltaHedgeStrategy(CtaTemplate):
         Callback when strategy is inited.
         """
         self.write_log("策略初始化")
-
-        self.rsi_buy = 50 + self.rsi_entry
-        self.rsi_sell = 50 - self.rsi_entry
-
-        self.load_bar(10)
 
     def on_start(self):
         """
@@ -89,8 +61,11 @@ class Etf50DeltaHedgeStrategy(CtaTemplate):
         """
         self.cancel_all()
 
-        if self.pos == 0:
-            self.buy(bar.close_price, self.fixed_size)
+        if isinstance(bar, BarData) is True:
+            if self.pos_dict[bar.symbol] == 0:
+                self.buy(bar.symbol, bar.close_price, self.fixed_size)
+        elif isinstance(bar,OptionBarData) is True:
+            print('option data: {}'.format(bar))
         self.put_event()
 
     def on_order(self, order: OrderData):

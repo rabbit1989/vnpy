@@ -2,10 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Sequence, List
 
-from mongoengine import DateTimeField, Document, FloatField, StringField, connect
+from mongoengine import DateTimeField, Document, FloatField, StringField, DictField, connect
 from mongoengine.context_managers import set_write_concern, switch_collection, switch_db
 from vnpy.trader.constant import Exchange, Interval
-from vnpy.trader.object import BarData, TickData
+from vnpy.trader.object import BarData, TickData, OptionBarData
 
 from .database import BaseDatabaseManager, Driver, DB_TZ
 
@@ -33,6 +33,7 @@ def init(_: Driver, settings: dict):
     )
 
     return MongoManager()
+
 
 
 class DbBarData(Document):
@@ -101,6 +102,42 @@ class DbBarData(Document):
             high_price=self.high_price,
             low_price=self.low_price,
             close_price=self.close_price,
+            gateway_name="DB",
+        )
+        return bar
+
+class DbOptionBarData(Document):
+    """
+    Candlestick option bar data for database storage.
+
+    Index is defined unique with datetime, interval, symbol
+    """
+
+    symbol: str = StringField()
+    exchange: str = StringField()
+    datetime: datetime = DateTimeField()
+    interval: str = StringField()
+    options: dict = DictField()
+
+    meta = {
+        "indexes": [
+            {
+                "fields": ("symbol", "exchange", "interval", "datetime"),
+                "unique": True,
+            }
+        ]
+    }
+
+    def to_bar(self):
+        """
+        Generate OptionBarData object from DbOptionBarData.
+        """
+        bar = OptionBarData(
+            symbol=self.symbol,
+            exchange=Exchange(self.exchange),
+            datetime=self.datetime.replace(tzinfo=DB_TZ),
+            interval=Interval(self.interval),
+            options=self.options,
             gateway_name="DB",
         )
         return bar
@@ -276,29 +313,33 @@ class MongoManager(BaseDatabaseManager):
         interval: Interval,
         start: datetime,
         end: datetime,
-    ) -> Sequence[BarData]:
-        with switch_collection(DbBarData, symbol):
-            s = DbBarData.objects(
+    ):
+        dbClass = DbBarData
+        if 'option' in symbol:
+            dbClass = DbOptionBarData
+        with switch_collection(dbClass, symbol):
+            s = dbClass.objects(
                 symbol=symbol,
                 exchange=exchange.value,
                 interval=interval.value,
                 datetime__gte=start,
                 datetime__lte=end,
             )
-            data = [db_bar.to_bar() for db_bar in s]
-        return data
+            return s
 
     def load_tick_data(
         self, symbol: str, exchange: Exchange, start: datetime, end: datetime
     ) -> Sequence[TickData]:
-        s = DbTickData.objects(
-            symbol=symbol,
-            exchange=exchange.value,
-            datetime__gte=start,
-            datetime__lte=end,
-        )
-        data = [db_tick.to_tick() for db_tick in s]
-        return data
+        with switch_collection(DbTickData, symbol):
+            s = DbTickData.objects(
+                symbol=symbol,
+                exchange=exchange.value,
+                datetime__gte=start,
+                datetime__lte=end,
+            )
+            return s
+        #data = [db_tick.to_tick() for db_tick in s]
+        #return data
 
     @staticmethod
     def to_update_param(d):

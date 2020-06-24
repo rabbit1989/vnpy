@@ -2,6 +2,8 @@
 Basic data structure used for general trading function in VN Trader.
 """
 
+from collections import defaultdict
+
 from dataclasses import dataclass
 from datetime import datetime
 from logging import INFO
@@ -97,6 +99,81 @@ class BarData(BaseData):
     def __post_init__(self):
         """"""
         self.vt_symbol = f"{self.symbol}.{self.exchange.value}"
+
+
+
+class OptionBarData(BarData):
+    """
+        bar data for option, symbol_based_dict和prop_based_dict存的东西是一样的，
+        只是key不一样， symbol_based_dict key是合约码, prop_based_dict的结构类似：
+        prop_based_dict = {
+            'call': {
+                1:{
+                    'price1': {
+                        'symbol': xxxx,
+                        'exchange': xxxx,
+                        'datetime': xxxxx,
+                        'interval': xxxx,
+                        'volume': xxxx,
+                        'open_interest': xxxx,
+                        'open_price': xxxx,
+                        'high_price': xxxxx,
+                        'low_price': xxxxx,
+                        'close_price': xxxxxx,
+                        'gateway_name': xxxxx,
+                    },
+                    'price2': {
+                        xxxxxx
+                    }
+                },
+                2: {
+                    xxxx
+                },
+                4:{
+                    xxxx
+                }
+            },
+            'put': {
+                xxxx
+            }
+        }
+    """
+    def __init__(
+        self, 
+        symbol: str,
+        exchange: Exchange,
+        datetime: datetime,
+        interval: Interval,
+        gateway_name: str,
+        options: dict,
+    ):
+        self.symbol = symbol,
+        self.exchange = exchange
+        self.datetime = datetime
+        self.interval = interval
+        self.gateway_name = gateway_name
+        self.options = options
+        self.symbol_based_dict = {}
+        rec_dd = lambda: defaultdict(rec_dd)
+        self.prop_based_dict = rec_dd()
+
+        for symbol, option in self.options.items():
+            bar = BarData(
+                symbol=symbol,
+                exchange=self.exchange,
+                datetime=self.datetime,
+                interval=self.interval,
+                volume=option['vol'],
+                open_interest=0,
+                open_price=option['open'],
+                high_price=option['high'],
+                low_price=option['low'],
+                close_price=option['settle'],
+                gateway_name="DB",
+            )
+            self.symbol_based_dict[symbol] = bar
+            self.prop_based_dict[option['call_put']][option['s_month']][option['strike_price']] = bar
+
 
 
 @dataclass

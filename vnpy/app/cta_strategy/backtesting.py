@@ -1,3 +1,5 @@
+# coding=utf-8
+
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Callable
@@ -17,7 +19,7 @@ from deap import creator, base, tools, algorithms
 from vnpy.trader.constant import (Direction, Offset, Exchange,
                                   Interval, Status)
 from vnpy.trader.database import database_manager
-from vnpy.trader.object import OrderData, TradeData, BarData, TickData
+from vnpy.trader.object import OrderData, TradeData, BarData, OptionBarData, TickData
 from vnpy.trader.utility import round_to
 
 from .base import (
@@ -36,6 +38,7 @@ sns.set_style("whitegrid")
 # Set deap algo
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("Individual", list, fitness=creator.FitnessMax)
+
 
 
 class OptimizationSetting:
@@ -108,9 +111,7 @@ class BacktestingEngine:
 
     def __init__(self):
         """"""
-        self.vt_symbol = ""
-        self.symbol = ""
-        self.exchange = None
+        self.configs = {}
         self.start = None
         self.end = None
         self.rate = 0
@@ -130,7 +131,6 @@ class BacktestingEngine:
         self.interval = None
         self.days = 0
         self.callback = None
-        self.history_data = []
 
         self.stop_order_count = 0
         self.stop_orders = {}
@@ -147,6 +147,9 @@ class BacktestingEngine:
 
         self.daily_results = {}
         self.daily_df = None
+        
+        # 缓存多品种数据当前的cursor，用于方法get_next_data
+        self.data_cache_list = []
 
     def clear_data(self):
         """
@@ -173,13 +176,12 @@ class BacktestingEngine:
 
     def set_parameters(
         self,
-        vt_symbol: str,
+        configs : list,
         interval: Interval,
         start: datetime,
         rate: float,
         slippage: float,
         size: float,
-        pricetick: float,
         capital: int = 0,
         end: datetime = None,
         mode: BacktestingMode = BacktestingMode.BAR,
@@ -187,27 +189,29 @@ class BacktestingEngine:
     ):
         """"""
         self.mode = mode
-        self.vt_symbol = vt_symbol
         self.interval = Interval(interval)
         self.rate = rate
         self.slippage = slippage
         self.size = size
-        self.pricetick = pricetick
         self.start = start
 
-        self.symbol, exchange_str = self.vt_symbol.split(".")
-        self.exchange = Exchange(exchange_str)
+
+        # get symbol and exchange
+        for vt_symbol, config in configs.items():
+            symbol, exchange_str = vt_symbol.split(".")
+            config['symbol'] = symbol
+            config['exchange'] = Exchange(exchange_str)
+            self.configs[symbol] = config
 
         self.capital = capital
         self.end = end
-        self.mode = mode
         self.inverse = inverse
 
     def add_strategy(self, strategy_class: type, setting: dict):
         """"""
         self.strategy_class = strategy_class
         self.strategy = strategy_class(
-            self, strategy_class.__name__, self.vt_symbol, setting
+            self, strategy_class.__name__, self.configs.keys(), setting
         )
 
     def load_data(self):
@@ -221,76 +225,36 @@ class BacktestingEngine:
             self.output("起始日期必须小于结束日期")
             return
 
-        self.history_data.clear()       # Clear previously loaded history data
-
-        # Load 30 days of data each time and allow for progress update
-        progress_delta = timedelta(days=30)
-        total_delta = self.end - self.start
-        interval_delta = INTERVAL_DELTA_MAP[self.interval]
-
-        start = self.start
-        end = self.start + progress_delta
-        progress = 0
-
-        while start < self.end:
-            end = min(end, self.end)  # Make sure end time stays within set range
-
+        for symbol, config in self.configs.items():
+            exchange = config['exchange']
             if self.mode == BacktestingMode.BAR:
-                data = load_bar_data(
-                    self.symbol,
-                    self.exchange,
+                cursor = load_bar_data(
+                    symbol,
+                    exchange,
                     self.interval,
-                    start,
-                    end
+                    self.start,
+                    self.end                    
                 )
             else:
-                data = load_tick_data(
-                    self.symbol,
-                    self.exchange,
-                    start,
-                    end
+                cursor = load_tick_data(
+                    symbol,
+                    exchange,
+                    self.start,
+                    self.end
                 )
-
-            self.history_data.extend(data)
-
-            progress += progress_delta / total_delta
-            progress = min(progress, 1)
-            progress_bar = "#" * int(progress * 10)
-            self.output(f"加载进度：{progress_bar} [{progress:.0%}]")
-
-            start = end + interval_delta
-            end += (progress_delta + interval_delta)
-
-        self.output(f"历史数据加载完成，数据量：{len(self.history_data)}")
-
+            config['cursor'] = cursor            
+            self.output(f"{symbol} 数据量：{cursor.count()}")
+                
     def run_backtesting(self):
         """"""
         if self.mode == BacktestingMode.BAR:
             func = self.new_bar
+            gen_obj_func = lambda data: data.to_bar()
         else:
             func = self.new_tick
+            gen_obj_func = lambda data: data.to_tick()
 
-        self.strategy.on_init()
-
-        # Use the first [days] of history data for initializing strategy
-        day_count = 0
-        ix = 0
-
-        for ix, data in enumerate(self.history_data):
-            if self.datetime and data.datetime.day != self.datetime.day:
-                day_count += 1
-                if day_count >= self.days:
-                    break
-
-            self.datetime = data.datetime
-
-            try:
-                self.callback(data)
-            except Exception:
-                self.output("触发异常，回测终止")
-                self.output(traceback.format_exc())
-                return
-
+        self.strategy.on_init()            
         self.strategy.inited = True
         self.output("策略初始化完成")
 
@@ -298,16 +262,18 @@ class BacktestingEngine:
         self.strategy.trading = True
         self.output("开始回放历史数据")
 
-        # Use the rest of history data for running backtesting
-        for data in self.history_data[ix:]:
+        while True:
+            data_obj = self.get_next_data(gen_obj_func)
+            if data_obj is None:
+                break
             try:
-                func(data)
+                func(data_obj)
             except Exception:
                 self.output("触发异常，回测终止")
                 self.output(traceback.format_exc())
                 return
-
         self.output("历史数据回放结束")
+
 
     def calculate_result(self):
         """"""
@@ -767,10 +733,11 @@ class BacktestingEngine:
         Cross limit order with last bar/tick data.
         """
         if self.mode == BacktestingMode.BAR:
-            long_cross_price = self.bar.low_price
-            short_cross_price = self.bar.high_price
-            long_best_price = self.bar.open_price
-            short_best_price = self.bar.open_price
+            if type(self.bar) is not OptionBarData:
+                long_cross_price = self.bar.low_price
+                short_cross_price = self.bar.high_price
+                long_best_price = self.bar.open_price
+                short_best_price = self.bar.open_price
         else:
             long_cross_price = self.tick.ask_price_1
             short_cross_price = self.tick.bid_price_1
@@ -778,6 +745,18 @@ class BacktestingEngine:
             short_best_price = short_cross_price
 
         for order in list(self.active_limit_orders.values()):
+            
+            if type(self.bar) is OptionBarData:
+                # 如果是opt数据，从bar里面把真正的合约拿出来
+                real_bar = self.bar.symbol_based_dict.get(order.symbol, None)
+                if real_bar is None:
+                    continue
+                long_cross_price = real_bar.low_price
+                short_cross_price = real_bar.high_price
+                long_best_price = real_bar.open_price
+                short_best_price = real_bar.open_price
+
+            
             # Push order update with status "not traded" (pending).
             if order.status == Status.SUBMITTING:
                 order.status = Status.NOTTRADED
@@ -829,7 +808,7 @@ class BacktestingEngine:
                 gateway_name=self.gateway_name,
             )
 
-            self.strategy.pos += pos_change
+            self.strategy.pos_dict[order.symbol] += pos_change
             self.strategy.on_trade(trade)
 
             self.trades[trade.vt_tradeid] = trade
@@ -918,7 +897,7 @@ class BacktestingEngine:
             self.strategy.on_stop_order(stop_order)
             self.strategy.on_order(order)
 
-            self.strategy.pos += pos_change
+            self.strategy.pos_dict[symbol] += pos_change
             self.strategy.on_trade(trade)
 
     def load_bar(
@@ -941,6 +920,7 @@ class BacktestingEngine:
     def send_order(
         self,
         strategy: CtaTemplate,
+        symbol: str,
         direction: Direction,
         offset: Offset,
         price: float,
@@ -949,15 +929,17 @@ class BacktestingEngine:
         lock: bool
     ):
         """"""
-        price = round_to(price, self.pricetick)
+        round_price = round_to(price, self.configs[symbol]['pricetick'])
+        print('org price: {}, round price: {}'.format(price, round_price))
         if stop:
-            vt_orderid = self.send_stop_order(direction, offset, price, volume)
+            vt_orderid = self.send_stop_order(symbol, direction, offset, round_price, volume)
         else:
-            vt_orderid = self.send_limit_order(direction, offset, price, volume)
+            vt_orderid = self.send_limit_order(symbol, direction, offset, round_price, volume)
         return [vt_orderid]
 
     def send_stop_order(
         self,
+        symbol: str,
         direction: Direction,
         offset: Offset,
         price: float,
@@ -967,7 +949,7 @@ class BacktestingEngine:
         self.stop_order_count += 1
 
         stop_order = StopOrder(
-            vt_symbol=self.vt_symbol,
+            vt_symbol=symbol,
             direction=direction,
             offset=offset,
             price=price,
@@ -983,6 +965,7 @@ class BacktestingEngine:
 
     def send_limit_order(
         self,
+        symbol,
         direction: Direction,
         offset: Offset,
         price: float,
@@ -992,8 +975,8 @@ class BacktestingEngine:
         self.limit_order_count += 1
 
         order = OrderData(
-            symbol=self.symbol,
-            exchange=self.exchange,
+            symbol=symbol,
+            exchange=self.configs[symbol]['exchange'],
             orderid=str(self.limit_order_count),
             direction=direction,
             offset=offset,
@@ -1109,6 +1092,41 @@ class BacktestingEngine:
         """
         return list(self.daily_results.values())
 
+    def get_next_data(self, gen_obj_func):
+        '''
+            多品种场景下，获取下一个时间周期的数据
+        '''
+        if not self.data_cache_list:
+            for vt_symbol, config in self.configs.items():
+                # data pair: 0: 数据， 1:cursor, 2: vt_symbol 
+                print ('11111 vt_symbol: {}'.format(vt_symbol))
+                cursor = config['cursor']
+                self.data_cache_list.append((cursor.next(), cursor, vt_symbol))
+        
+        def get_min_index():    
+            min_date_time = None
+            min_index = 0
+            for i, ele in enumerate(self.data_cache_list):
+                raw_data = ele[0]
+                if min_date_time is None or raw_data['datetime'] < min_date_time:
+                    min_index = i
+                    min_date_time = raw_data['datetime']
+            return min_index
+
+        index = get_min_index()
+        data_pair = self.data_cache_list[index]
+        del self.data_cache_list[index]
+        data_obj = gen_obj_func(data_pair[0])
+        
+        try:
+            self.data_cache_list.append((data_pair[1].next(), 
+                                         data_pair[1], 
+                                         data_pair[2]))  
+        except Exception:
+            self.output('get_next_data(): no more data')
+            return None
+        return data_obj
+    
 
 class DailyResult:
     """"""
