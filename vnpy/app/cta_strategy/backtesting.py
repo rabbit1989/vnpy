@@ -17,7 +17,7 @@ from pandas import DataFrame
 from deap import creator, base, tools, algorithms
 
 from vnpy.trader.constant import (Direction, Offset, Exchange,
-                                  Interval, Status)
+                                  Interval, Status, OrderType)
 from vnpy.trader.database import database_manager
 from vnpy.trader.object import OrderData, TradeData, BarData, OptionBarData, TickData
 from vnpy.trader.utility import round_to
@@ -139,6 +139,10 @@ class BacktestingEngine:
         self.limit_order_count = 0
         self.limit_orders = {}
         self.active_limit_orders = {}
+
+        self.market_order_count = 0
+        self.active_market_orders = {}
+
 
         self.trade_count = 0
         self.trades = {}
@@ -711,6 +715,7 @@ class BacktestingEngine:
         self.bar = bar
         self.datetime = bar.datetime
 
+        self.cross_market_order()
         self.cross_limit_order()
         self.cross_stop_order()
         self.strategy.on_bar(bar)
@@ -722,11 +727,78 @@ class BacktestingEngine:
         self.tick = tick
         self.datetime = tick.datetime
 
+        self.cross_market_order()
         self.cross_limit_order()
         self.cross_stop_order()
         self.strategy.on_tick(tick)
 
         self.update_daily_close(tick.last_price)
+
+    def cross_market_order(self):
+        """
+        Cross market order with last bar/tick data.
+        """
+        if self.mode == BacktestingMode.BAR:
+            if type(self.bar) is not OptionBarData:
+                long_cross_price = self.bar.open_price
+                short_cross_price = self.bar.open_price
+        else:
+            long_cross_price = self.tick.ask_price_1
+            short_cross_price = self.tick.bid_price_1
+        for order in list(self.active_market_orders.values()):
+            if type(self.bar) is OptionBarData:
+                # 如果是opt数据，从bar里面把真正的合约拿出来
+                real_bar = self.bar.symbol_based_dict.get(order.symbol, None)
+                if real_bar is None:
+                    print('can not find real option bar for {}'.format(order.symbol))
+                    continue
+                long_cross_price = real_bar.open_price
+                short_cross_price = real_bar.open_price
+            elif order.symbol != self.bar.symbol:
+                continue
+
+            # Push order update with status "not traded" (pending).
+            if order.status == Status.SUBMITTING:
+                order.status = Status.NOTTRADED
+                self.strategy.on_order(order)
+
+            # Push order udpate with status "all traded" (filled).
+            order.traded = order.volume
+            order.status = Status.ALLTRADED
+            self.strategy.on_order(order)
+
+            self.active_market_orders.pop(order.vt_orderid)
+
+            # Push trade update
+            self.trade_count += 1
+
+            if (order.direction == Direction.LONG and order.offset == Offset.OPEN) \
+              or (order.direction == Direction.SHORT and order.offset == Offset.CLOSE):
+                trade_price = min(order.price, long_cross_price)
+                pos_change = order.volume
+            else:
+                trade_price = max(order.price, short_cross_price)
+                pos_change = -order.volume
+
+            trade = TradeData(
+                symbol=order.symbol,
+                exchange=order.exchange,
+                orderid=order.orderid,
+                tradeid=str(self.trade_count),
+                direction=order.direction,
+                offset=order.offset,
+                price=trade_price,
+                volume=order.volume,
+                datetime=self.datetime,
+                gateway_name=self.gateway_name,
+            )
+
+            self.strategy.pos_dict[order.symbol] += pos_change
+            self.strategy.on_trade(trade)
+
+            self.trades[trade.vt_tradeid] = trade
+
+
 
     def cross_limit_order(self):
         """
@@ -754,7 +826,6 @@ class BacktestingEngine:
                 long_best_price = real_bar.open_price
                 short_best_price = real_bar.open_price
 
-            print('passed if')
             # Push order update with status "not traded" (pending).
             if order.status == Status.SUBMITTING:
                 order.status = Status.NOTTRADED
@@ -923,15 +994,19 @@ class BacktestingEngine:
         offset: Offset,
         price: float,
         volume: float,
-        stop: bool,
+        order_type: OrderType,
         lock: bool
     ):
         """"""
-        round_price = round_to(price, self.configs[symbol]['pricetick'])
-        if stop:
+        #round_price = round_to(price, self.configs[symbol]['pricetick'])
+        round_price = price
+        if order_type == OrderType.STOP:
             vt_orderid = self.send_stop_order(symbol, direction, offset, round_price, volume)
-        else:
+        elif order_type == OrderType.LIMIT:
             vt_orderid = self.send_limit_order(symbol, direction, offset, round_price, volume)
+        elif order_type == OrderType.MARKET:
+            print('send market order symbol: {}'.format(symbol))
+            vt_orderid = self.send_market_order(symbol, direction, offset, round_price, volume)
         return [vt_orderid]
 
     def send_stop_order(
@@ -970,11 +1045,11 @@ class BacktestingEngine:
     ):
         """"""
         self.limit_order_count += 1
-
+        exchange = self.configs[symbol]['exchange'] if symbol in self.configs else Exchange('SSE') 
         order = OrderData(
             symbol=symbol,
-            exchange=self.configs[symbol]['exchange'],
-            orderid=str(self.limit_order_count),
+            exchange=exchange,
+            orderid='Limit_{}'.format(self.limit_order_count),
             direction=direction,
             offset=offset,
             price=price,
@@ -989,6 +1064,35 @@ class BacktestingEngine:
 
         return order.vt_orderid
 
+
+    def send_market_order(
+        self,
+        symbol,
+        direction: Direction,
+        offset: Offset,
+        price: float,
+        volume: float
+    ):
+        """"""
+        self.market_order_count += 1
+        exchange = self.configs[symbol]['exchange'] if symbol in self.configs else Exchange('SSE') 
+        order = OrderData(
+            symbol=symbol,
+            exchange=exchange,
+            orderid='Market_{}'.format(self.market_order_count),
+            direction=direction,
+            offset=offset,
+            price=price,
+            volume=volume,
+            status=Status.SUBMITTING,
+            gateway_name=self.gateway_name,
+            datetime=self.datetime
+        )
+
+        self.active_market_orders[order.vt_orderid] = order
+        return order.vt_orderid
+
+
     def cancel_order(self, strategy: CtaTemplate, vt_orderid: str):
         """
         Cancel order by vt_orderid.
@@ -997,6 +1101,8 @@ class BacktestingEngine:
             self.cancel_stop_order(strategy, vt_orderid)
         else:
             self.cancel_limit_order(strategy, vt_orderid)
+            self.cancel_market_order(strategy, vt_orderid)
+        
 
     def cancel_stop_order(self, strategy: CtaTemplate, vt_orderid: str):
         """"""
@@ -1016,6 +1122,17 @@ class BacktestingEngine:
         order.status = Status.CANCELLED
         self.strategy.on_order(order)
 
+
+    def cancel_market_order(self, strategy: CtaTemplate, vt_orderid: str):
+        """"""
+        if vt_orderid not in self.active_market_orders:
+            return
+        order = self.active_market_orders.pop(vt_orderid)
+
+        order.status = Status.CANCELLED
+        self.strategy.on_order(order)
+
+
     def cancel_all(self, strategy: CtaTemplate):
         """
         Cancel all orders, both limit and stop.
@@ -1024,9 +1141,16 @@ class BacktestingEngine:
         for vt_orderid in vt_orderids:
             self.cancel_limit_order(strategy, vt_orderid)
 
+
+        market_orderids = list(self.active_market_orders.keys())
+        for vt_orderid in market_orderids:
+            self.cancel_market_order(vt_orderid)
+        
         stop_orderids = list(self.active_stop_orders.keys())
         for vt_orderid in stop_orderids:
             self.cancel_stop_order(strategy, vt_orderid)
+        
+
 
     def write_log(self, msg: str, strategy: CtaTemplate = None):
         """
@@ -1096,7 +1220,6 @@ class BacktestingEngine:
         if not self.data_cache_list:
             for vt_symbol, config in self.configs.items():
                 # data pair: 0: 数据， 1:cursor, 2: vt_symbol 
-                print ('11111 vt_symbol: {}'.format(vt_symbol))
                 cursor = config['cursor']
                 self.data_cache_list.append((cursor.next(), cursor, vt_symbol))
         

@@ -5,7 +5,7 @@ from copy import copy
 from typing import Any, Callable
 
 
-from vnpy.trader.constant import Interval, Direction, Offset
+from vnpy.trader.constant import Interval, Direction, Offset, OrderType
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual
 
@@ -150,29 +150,29 @@ class CtaTemplate(ABC):
         """
         pass
 
-    def buy(self, symbol: str, price: float, volume: float, stop: bool = False, lock: bool = False):
+    def buy(self, symbol: str, price: float, volume: float, order_type: OrderType=OrderType.LIMIT, lock: bool = False):
         """
         Send buy order to open a long position.
         """
-        return self.send_order(symbol, Direction.LONG, Offset.OPEN, price, volume, stop, lock)
+        return self.send_order(symbol, Direction.LONG, Offset.OPEN, price, volume, order_type, lock)
 
-    def sell(self, symbol: str, price: float, volume: float, stop: bool = False, lock: bool = False):
+    def sell(self, symbol: str, price: float, volume: float, order_type: OrderType=OrderType.LIMIT, lock: bool = False):
         """
         Send sell order to close a long position.
         """
-        return self.send_order(symbol, Direction.SHORT, Offset.CLOSE, price, volume, stop, lock)
+        return self.send_order(symbol, Direction.LONG, Offset.CLOSE, price, volume, order_type, lock)
 
-    def short(self, symbol: str, price: float, volume: float, stop: bool = False, lock: bool = False):
+    def short(self, symbol: str, price: float, volume: float, order_type: OrderType=OrderType.LIMIT, lock: bool = False):
         """
         Send short order to open as short position.
         """
-        return self.send_order(symbol, Direction.SHORT, Offset.OPEN, price, volume, stop, lock)
+        return self.send_order(symbol, Direction.SHORT, Offset.OPEN, price, volume, order_type, lock)
 
-    def cover(self, symbol: str, price: float, volume: float, stop: bool = False, lock: bool = False):
+    def cover(self, symbol: str, price: float, volume: float, order_type: OrderType=OrderType.LIMIT, lock: bool = False):
         """
         Send cover order to close a short position.
         """
-        return self.send_order(symbol, Direction.LONG, Offset.CLOSE, price, volume, stop, lock)
+        return self.send_order(symbol, Direction.SHORT, Offset.CLOSE, price, volume, order_type, lock)
 
     def send_order(
         self,
@@ -181,7 +181,7 @@ class CtaTemplate(ABC):
         offset: Offset,
         price: float,
         volume: float,
-        stop: bool = False,
+        order_type: OrderType,
         lock: bool = False
     ):
         """
@@ -189,7 +189,7 @@ class CtaTemplate(ABC):
         """
         if self.trading:
             vt_orderids = self.cta_engine.send_order(
-                self, symbol, direction, offset, price, volume, stop, lock
+                self, symbol, direction, offset, price, volume, order_type, lock
             )
             return vt_orderids
         else:
@@ -274,6 +274,14 @@ class CtaTemplate(ABC):
         """
         if self.trading:
             self.cta_engine.sync_strategy_data(self)
+
+    def get_option_list(self):
+        assert self.spot_symbol is not None
+        l = []
+        for symbol, pos in self.pos_dict.items():
+            if symbol != self.spot_symbol and pos > 0:
+                l.append(symbol)
+        return l
 
 
 class CtaSignal(ABC):
@@ -432,12 +440,4 @@ class TargetPosTemplate(CtaTemplate):
                         vt_orderids = self.sell(short_price, abs(self.pos))
                 else:
                     vt_orderids = self.short(short_price, abs(pos_change))
-            self.active_orderids.extend(vt_orderids)
-    
-    def get_option_list(self):
-        assert self.sport_symbol is not None
-        l = []
-        for symbol in self.pos_dict.keys():
-            if symbol != self.spot_symbol:
-                l.append(symbol)
-        return l
+            self.active_orderids.extend(vt_orderids)        

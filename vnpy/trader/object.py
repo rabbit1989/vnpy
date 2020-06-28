@@ -179,8 +179,8 @@ class OptionBarData(BaseData):
             获取指定档位/类型的期权
             level 为正表示实值期权，为负表示虚值
         '''
-        small_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month] if price < spot_price]
-        big_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month] if price >= spot_price]
+        small_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month].items() if price < spot_price]
+        big_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month].items() if price >= spot_price]
         small_bar_list = sorted(small_bar_list, key=lambda x: x[0], reverse=True)
         big_bar_list = sorted(big_bar_list, key=lambda x: x[0])
         if call_put == 'P':
@@ -201,8 +201,8 @@ class OptionBarData(BaseData):
             指定期权还有多少天到期
         '''
         delist_date_str = self.options[symbol]['delist_date']
-        cur_date = datetime.datetime.strptime(cur_date_str, '%Y%m%d')
-        delist_date = datetime.datetime.strptime(delist_date_str, '%Y%m%d')
+        cur_date = datetime.strptime(cur_date_str, '%Y%m%d')
+        delist_date = datetime.strptime(delist_date_str, '%Y%m%d')
         return (delist_date-cur_date).days
 
 

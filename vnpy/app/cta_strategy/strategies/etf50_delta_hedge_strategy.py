@@ -12,6 +12,7 @@ from vnpy.app.cta_strategy import (
     BarGenerator,
     ArrayManager,
 )
+from vnpy.trader.constant import OrderType
 from vnpy.trader.object import OptionBarData
 
 
@@ -24,7 +25,8 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
     fixed_size = 1
 
     parameters = [
-        "fixed_size"
+        "fixed_size",
+        "spot_symbol"
     ]
     variables = [
     ]
@@ -72,8 +74,9 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
             call_put=call_put,
             level=level,
             s_month=s_month)
-        print('尝试买入期权: {}, 挂单价: {}'.format(option_bar.symbol, option_bar.close_price))
-        self.buy(option_bar.symbol, option_bar.close_price, self.fixed_size)
+        print('尝试买入期权: {}, 挂单价: {}, 现货价: {}'.format(
+            option_bar.symbol, option_bar.close_price, self.spot_close_price))
+        self.buy(option_bar.symbol, option_bar.close_price, self.fixed_size, order_type=OrderType.MARKET)
 
 
     def on_bar(self, bar):
@@ -85,7 +88,7 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
             if self.pos_dict[bar.symbol] == 0:
                 self.buy(bar.symbol, bar.close_price, self.fixed_size)
             self.spot_close_price = bar.close_price
-        elif isinstance(bar,OptionBarData) is True:
+        elif isinstance(bar, OptionBarData) is True:
             if self.pos_dict[self.spot_symbol] > 0:
                 option_symbol_list = self.get_option_list()
                 if not option_symbol_list:
@@ -93,18 +96,19 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
                     print('买入现货后 期权还是空仓，则买入认沽期权')
                     self.buy_option(bar, 'P', -1)
                 else:
-                    assert len(option_symbol_list) == 1
+                    # assert len(option_symbol_list) == 1
                     option_symbol = option_symbol_list[0]
                     num_day = bar.get_num_day_expired(option_symbol, bar.datetime.strftime("%Y%m%d"))
                     if num_day < 5:
                         # 如果期权快到期了，需要换仓
-                        option_bar = bar.symbol_based_dict(option_symbol)
-                        print('期权快到期了，需要换仓, 期权 {} 当前结算价: {}'.format(
-                            option_symbol, option_bar.close_price))
+                        option_bar = bar.symbol_based_dict[option_symbol]
+                        print('期权快到期了，需要换仓, 期权 {} 当前结算价: {}, 当前现货价格: {}'.format(
+                            option_symbol, option_bar.close_price, self.spot_close_price))
                         self.sell(        
                             option_symbol,
                             option_bar.close_price,
-                            self.pos_dict[option_symbol])
+                            self.pos_dict[option_symbol],
+                            order_type=OrderType.MARKET)
                         self.buy_option(bar, 'P', -1)
 
 
@@ -120,6 +124,7 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
+        #print('on_trade: {}'.format(trade))
         self.put_event()
 
     def on_stop_order(self, stop_order: StopOrder):
