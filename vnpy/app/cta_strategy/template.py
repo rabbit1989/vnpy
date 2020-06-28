@@ -433,3 +433,11 @@ class TargetPosTemplate(CtaTemplate):
                 else:
                     vt_orderids = self.short(short_price, abs(pos_change))
             self.active_orderids.extend(vt_orderids)
+    
+    def get_option_list(self):
+        assert self.sport_symbol is not None
+        l = []
+        for symbol in self.pos_dict.keys():
+            if symbol != self.spot_symbol:
+                l.append(symbol)
+        return l

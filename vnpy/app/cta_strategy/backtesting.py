@@ -714,8 +714,8 @@ class BacktestingEngine:
         self.cross_limit_order()
         self.cross_stop_order()
         self.strategy.on_bar(bar)
-
-        self.update_daily_close(bar.close_price)
+        if type(self.bar) is not OptionBarData:
+            self.update_daily_close(bar.close_price)
 
     def new_tick(self, tick: TickData):
         """"""
@@ -743,9 +743,7 @@ class BacktestingEngine:
             short_cross_price = self.tick.bid_price_1
             long_best_price = long_cross_price
             short_best_price = short_cross_price
-
         for order in list(self.active_limit_orders.values()):
-            
             if type(self.bar) is OptionBarData:
                 # 如果是opt数据，从bar里面把真正的合约拿出来
                 real_bar = self.bar.symbol_based_dict.get(order.symbol, None)
@@ -756,12 +754,12 @@ class BacktestingEngine:
                 long_best_price = real_bar.open_price
                 short_best_price = real_bar.open_price
 
-            
+            print('passed if')
             # Push order update with status "not traded" (pending).
             if order.status == Status.SUBMITTING:
                 order.status = Status.NOTTRADED
                 self.strategy.on_order(order)
-
+            print('order price: {}, long cross price: {}'.format(order.price, long_cross_price))
             # Check whether limit orders can be filled.
             long_cross = (
                 order.direction == Direction.LONG
@@ -777,7 +775,6 @@ class BacktestingEngine:
 
             if not long_cross and not short_cross:
                 continue
-
             # Push order udpate with status "all traded" (filled).
             order.traded = order.volume
             order.status = Status.ALLTRADED
@@ -818,10 +815,11 @@ class BacktestingEngine:
         Cross stop order with last bar/tick data.
         """
         if self.mode == BacktestingMode.BAR:
-            long_cross_price = self.bar.high_price
-            short_cross_price = self.bar.low_price
-            long_best_price = self.bar.open_price
-            short_best_price = self.bar.open_price
+            if type(self.bar) is not OptionBarData:
+                long_cross_price = self.bar.high_price
+                short_cross_price = self.bar.low_price
+                long_best_price = self.bar.open_price
+                short_best_price = self.bar.open_price
         else:
             long_cross_price = self.tick.last_price
             short_cross_price = self.tick.last_price
@@ -930,7 +928,6 @@ class BacktestingEngine:
     ):
         """"""
         round_price = round_to(price, self.configs[symbol]['pricetick'])
-        print('org price: {}, round price: {}'.format(price, round_price))
         if stop:
             vt_orderid = self.send_stop_order(symbol, direction, offset, round_price, volume)
         else:

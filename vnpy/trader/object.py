@@ -102,7 +102,7 @@ class BarData(BaseData):
 
 
 
-class OptionBarData(BarData):
+class OptionBarData(BaseData):
     """
         bar data for option, symbol_based_dict和prop_based_dict存的东西是一样的，
         只是key不一样， symbol_based_dict key是合约码, prop_based_dict的结构类似：
@@ -174,6 +174,36 @@ class OptionBarData(BarData):
             self.symbol_based_dict[symbol] = bar
             self.prop_based_dict[option['call_put']][option['s_month']][option['strike_price']] = bar
 
+    def get_real_bar(self, spot_price, call_put, level, s_month):
+        '''
+            获取指定档位/类型的期权
+            level 为正表示实值期权，为负表示虚值
+        '''
+        small_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month] if price < spot_price]
+        big_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month] if price >= spot_price]
+        small_bar_list = sorted(small_bar_list, key=lambda x: x[0], reverse=True)
+        big_bar_list = sorted(big_bar_list, key=lambda x: x[0])
+        if call_put == 'P':
+            if level > 0:
+                pair = big_bar_list[level-1]
+            else:
+                pair = small_bar_list[-level-1]
+        else:
+            if level > 0:
+                pair = small_bar_list[level-1]
+            else:
+                pair = big_bar_list[-level-1]
+        return pair[1]
+
+    
+    def get_num_day_expired(self, symbol, cur_date_str):
+        '''
+            指定期权还有多少天到期
+        '''
+        delist_date_str = self.options[symbol]['delist_date']
+        cur_date = datetime.datetime.strptime(cur_date_str, '%Y%m%d')
+        delist_date = datetime.datetime.strptime(delist_date_str, '%Y%m%d')
+        return (delist_date-cur_date).days
 
 
 @dataclass
