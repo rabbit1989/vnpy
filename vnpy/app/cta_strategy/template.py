@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 
 from vnpy.trader.constant import Interval, Direction, Offset, OrderType
-from vnpy.trader.object import BarData, TickData, OrderData, TradeData
+from vnpy.trader.object import BarData, TickData, OrderData, TradeData, OptionBarData
 from vnpy.trader.utility import virtual
 
 from .base import StopOrder, EngineType
@@ -282,6 +282,14 @@ class CtaTemplate(ABC):
             if symbol != self.spot_symbol and pos > 0:
                 l.append(symbol)
         return l
+    
+    def update_pos(self, symbol, pos_change, bar):
+        self.pos_dict[symbol] += pos_change
+        # 遍历pos_dict, 删除过旧的symbol入口
+        #if type(bar) is OptionBarData:
+        #    for sym in list(self.pos_dict.keys()):
+        #        if sym not in bar.symbol_based_dict and self.pos_dict[sym] == 0:
+        #            del self.pos_dict[symbol]
 
 
 class CtaSignal(ABC):

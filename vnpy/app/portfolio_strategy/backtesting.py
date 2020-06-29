@@ -725,7 +725,6 @@ class ContractDailyResult:
             self.slippage += trade.volume * size * slippage
             self.turnover += turnover
             self.commission += turnover * rate
-
         # Net pnl takes account of commission and slippage cost
         self.total_pnl = self.trading_pnl + self.holding_pnl
         self.net_pnl = self.total_pnl - self.commission - self.slippage
@@ -769,9 +768,9 @@ class PortfolioDailyResult:
         self,
         pre_closes: Dict[str, float],
         start_poses: Dict[str, float],
-        sizes: Dict[str, float],
-        rates: Dict[str, float],
-        slippages: Dict[str, float],
+        size: float,
+        rate: float,
+        slippage: float,
     ) -> None:
         """"""
         self.pre_closes = pre_closes
@@ -780,9 +779,9 @@ class PortfolioDailyResult:
             contract_result.calculate_pnl(
                 pre_closes.get(vt_symbol, 0),
                 start_poses.get(vt_symbol, 0),
-                sizes[vt_symbol],
-                rates[vt_symbol],
-                slippages[vt_symbol]
+                size,
+                rate,
+                slippage
             )
 
             self.trade_count += contract_result.trade_count
@@ -798,11 +797,11 @@ class PortfolioDailyResult:
 
     def update_close_prices(self, close_prices: Dict[str, float]) -> None:
         """"""
-        self.close_prices = close_prices
-
+        self.close_prices.update(close_prices)
         for vt_symbol, close_price in close_prices.items():
-            contract_result = self.contract_results[vt_symbol]
-            contract_result.update_close_price(close_price)
+            if vt_symbol not in self.contract_results:
+                self.contract_results[vt_symbol] = ContractDailyResult(self.date, close_price)
+            contract_result[vt_symbol].update_close_price(close_price)
 
 
 @lru_cache(maxsize=999)

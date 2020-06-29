@@ -16,6 +16,7 @@ import seaborn as sns
 from pandas import DataFrame
 from deap import creator, base, tools, algorithms
 
+from vnpy.app.portfolio_strategy.backtesting import PortfolioDailyResult
 from vnpy.trader.constant import (Direction, Offset, Exchange,
                                   Interval, Status, OrderType)
 from vnpy.trader.database import database_manager
@@ -294,21 +295,22 @@ class BacktestingEngine:
             daily_result.add_trade(trade)
 
         # Calculate daily result by iteration.
-        pre_close = 0
-        start_pos = 0
+        pre_closes = {}
+        start_poses = {}
+
+        # 构造 sizes, rates, slip
 
         for daily_result in self.daily_results.values():
             daily_result.calculate_pnl(
-                pre_close,
-                start_pos,
+                pre_closes,
+                start_poses,
                 self.size,
                 self.rate,
                 self.slippage,
-                self.inverse
             )
 
-            pre_close = daily_result.close_price
-            start_pos = daily_result.end_pos
+            pre_closes = daily_result.close_prices
+            start_poses = daily_result.end_poses
 
         # Generate dataframe
         results = defaultdict(list)
@@ -700,15 +702,27 @@ class BacktestingEngine:
 
         return results
 
-    def update_daily_close(self, price: float):
+    def update_daily_close(self, bar):
         """"""
         d = self.datetime.date()
+        close_prices = {}
 
+        if type(bar) is not OptionBarData:
+            close_prices[bar.vt_symbol] = bar.close_price
+        else:
+            # 把有仓位的期权合约拎出来，更新一下dailyresult
+            for symbol in self.strategy.pos_dict.keys():
+                option_bar = bar.symbol_based_dict.get(symbol, None)
+                if option_bar is None:
+                    continue
+                close_prices[option_bar.vt_symbol] = option_bar.close_price
+        #print('update_daily_close: {}'.format(close_prices))
         daily_result = self.daily_results.get(d, None)
         if daily_result:
-            daily_result.close_price = price
+            daily_result.update_close_prices(close_prices)
         else:
-            self.daily_results[d] = DailyResult(d, price)
+            self.daily_results[d] = PortfolioDailyResult(d, close_prices)
+
 
     def new_bar(self, bar: BarData):
         """"""
@@ -719,8 +733,8 @@ class BacktestingEngine:
         self.cross_limit_order()
         self.cross_stop_order()
         self.strategy.on_bar(bar)
-        if type(self.bar) is not OptionBarData:
-            self.update_daily_close(bar.close_price)
+        self.update_daily_close(bar)
+
 
     def new_tick(self, tick: TickData):
         """"""
@@ -792,8 +806,7 @@ class BacktestingEngine:
                 datetime=self.datetime,
                 gateway_name=self.gateway_name,
             )
-
-            self.strategy.pos_dict[order.symbol] += pos_change
+            self.strategy.update_pos(order.symbol, pos_change, self.bar)
             self.strategy.on_trade(trade)
 
             self.trades[trade.vt_tradeid] = trade
@@ -876,7 +889,7 @@ class BacktestingEngine:
                 gateway_name=self.gateway_name,
             )
 
-            self.strategy.pos_dict[order.symbol] += pos_change
+            self.strategy.update_pos(order.symbol, pos_change, self.bar)
             self.strategy.on_trade(trade)
 
             self.trades[trade.vt_tradeid] = trade
