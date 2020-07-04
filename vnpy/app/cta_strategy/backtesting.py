@@ -1018,7 +1018,6 @@ class BacktestingEngine:
         elif order_type == OrderType.LIMIT:
             vt_orderid = self.send_limit_order(symbol, direction, offset, round_price, volume)
         elif order_type == OrderType.MARKET:
-            print('send market order symbol: {}'.format(symbol))
             vt_orderid = self.send_market_order(symbol, direction, offset, round_price, volume)
         return [vt_orderid]
 

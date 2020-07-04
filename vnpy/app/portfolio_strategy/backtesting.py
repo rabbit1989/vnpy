@@ -801,7 +801,7 @@ class PortfolioDailyResult:
         for vt_symbol, close_price in close_prices.items():
             if vt_symbol not in self.contract_results:
                 self.contract_results[vt_symbol] = ContractDailyResult(self.date, close_price)
-            contract_result[vt_symbol].update_close_price(close_price)
+            self.contract_results[vt_symbol].update_close_price(close_price)
 
 
 @lru_cache(maxsize=999)

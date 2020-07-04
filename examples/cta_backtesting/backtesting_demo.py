@@ -6,7 +6,7 @@ from vnpy.app.cta_strategy.backtesting import BacktestingEngine, OptimizationSet
 from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import (
     OptionDeltaHedgeStrategy
 )
-
+from vnpy.trader.constant import OptionSMonth
 
 
 engine = BacktestingEngine()
@@ -23,12 +23,20 @@ engine.set_parameters(
     start=datetime(2017, 12, 1),
     end=datetime(2020, 6, 30),
     rate=0.3/10000,
-    slippage=0.2,
+    slippage=0,
     size=300,
     capital=1_000_0,
     mode=BacktestingMode.BAR
 )
-engine.add_strategy(OptionDeltaHedgeStrategy, {'spot_symbol': '50etf'})
+engine.add_strategy(
+    OptionDeltaHedgeStrategy, 
+    {'spot_symbol': '50etf',
+     'option_level': 1,
+     "num_day_before_expired": 20,
+     "s_month_type": OptionSMonth.NEXT_SEASON,
+    })
+
+
 
 engine.load_data()
 engine.run_backtesting()

@@ -152,3 +152,13 @@ class Interval(Enum):
     HOUR = "1h"
     DAILY = "d"
     WEEKLY = "w"
+
+class OptionSMonth(Enum):
+    '''
+    根据到期时间划分期权类型
+    '''
+    CUR_MONTH = 'cur_month',
+    NEXT_MONTH = 'next_month'
+    NEXT_SEASON = 'next_season'
+    NEXT_2SEASON = 'next_2season'
+    
