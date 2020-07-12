@@ -286,10 +286,10 @@ class CtaTemplate(ABC):
     def update_pos(self, symbol, pos_change, bar):
         self.pos_dict[symbol] += pos_change
         # 遍历pos_dict, 删除过旧的symbol入口
-        #if type(bar) is OptionBarData:
-        #    for sym in list(self.pos_dict.keys()):
-        #        if sym not in bar.symbol_based_dict and self.pos_dict[sym] == 0:
-        #            del self.pos_dict[symbol]
+        if type(bar) is OptionBarData:
+            for sym in list(self.pos_dict.keys()):
+                if sym not in bar.symbol_based_dict and self.pos_dict[sym] == 0:
+                    del self.pos_dict[sym]
 
 
 class CtaSignal(ABC):

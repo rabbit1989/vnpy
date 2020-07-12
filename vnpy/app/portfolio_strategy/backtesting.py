@@ -707,20 +707,22 @@ class ContractDailyResult:
         self.end_pos = start_pos
 
         self.holding_pnl = self.start_pos * (self.close_price - self.pre_close) * size
-
         # Trading pnl is the pnl from new trade during the day
         self.trade_count = len(self.trades)
 
         for trade in self.trades:
-            if trade.direction == Direction.LONG:
+            if trade.offset == Offset.OPEN:
                 pos_change = trade.volume
-            else:
+            elif trade.offset == Offset.CLOSE:
                 pos_change = -trade.volume
+            else:
+                raise Exception('unknown trade offset')
 
             self.end_pos += pos_change
 
             turnover = trade.volume * size * trade.price
-
+            #print('2222222trade change self.close_price: {}, trade.price: {}, size: {}, pos change {}'.format(
+            #    self.close_price, trade.price, size, pos_change))
             self.trading_pnl += pos_change * (self.close_price - trade.price) * size
             self.slippage += trade.volume * size * slippage
             self.turnover += turnover
@@ -728,6 +730,9 @@ class ContractDailyResult:
         # Net pnl takes account of commission and slippage cost
         self.total_pnl = self.trading_pnl + self.holding_pnl
         self.net_pnl = self.total_pnl - self.commission - self.slippage
+        #print('{}, self.start_pos: {}, self.close_price: {}, self.pre_close: {}, size: {}, totol pnl: {}, hold pnl: {}, trade pnl: {}'.format(
+        #    self.date, self.start_pos, self.close_price, self.pre_close, size, self.total_pnl, self.holding_pnl, self.trading_pnl))
+        
 
     def update_close_price(self, close_price: float) -> None:
         """"""
@@ -794,6 +799,7 @@ class PortfolioDailyResult:
             self.net_pnl += contract_result.net_pnl
 
             self.end_poses[vt_symbol] = contract_result.end_pos
+        #print('end pos: {}'.format(self.end_poses))
 
     def update_close_prices(self, close_prices: Dict[str, float]) -> None:
         """"""
