@@ -711,12 +711,11 @@ class ContractDailyResult:
         self.trade_count = len(self.trades)
 
         for trade in self.trades:
-            if trade.offset == Offset.OPEN:
+            if (trade.direction == Direction.LONG and trade.offset == Offset.OPEN) \
+              or (trade.direction == Direction.SHORT and trade.offset == Offset.CLOSE):
                 pos_change = trade.volume
-            elif trade.offset == Offset.CLOSE:
-                pos_change = -trade.volume
             else:
-                raise Exception('unknown trade offset')
+                pos_change = -trade.volume
 
             self.end_pos += pos_change
 

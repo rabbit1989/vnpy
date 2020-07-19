@@ -889,7 +889,12 @@ class Option:
         #call = ( norm.cdf(d1) * self.s - norm.cdf(d2) * self.k * math.exp( -self.rf * self.t ) )
         self.put =  ( -norm.cdf(-d1) * self.s + norm.cdf(-d2) * self.k * math.exp( -self.rf * self.t ) )
         self.put_delta = -norm.cdf(-d1) 
- 
+    
+    def get_vega(self):
+        d1 = ( math.log(self.s/self.k) + ( self.rf + math.pow( self.vol, 2)/2 ) * self.t ) / ( self.vol * math.sqrt(self.t) )
+        prob_density = 1 / np.sqrt(2 * np.pi) * np.exp(-d1 ** 2 * 0.5)    
+        self.vega = self.s * prob_density * np.sqrt(self.t)
+    
  
     def get_theta(self, dt = 0.0027777):
         self.t += dt
@@ -908,12 +913,20 @@ class Option:
         self.get_price_delta()
         orig_delta = self.delta
         self.gamma = (after_delta - orig_delta) / ds
+        
+        # 用公式计算gamma, 和原来的计算结果差不多
+        #d1 = ( math.log(self.s/self.k) + ( self.rf + math.pow( self.vol, 2)/2 ) * self.t ) / ( self.vol * math.sqrt(self.t) )
+        #prob_density = 1 / np.sqrt(2 * np.pi) * np.exp(-d1 ** 2 * 0.5)
+        #gamma = prob_density / (self.s * self.vol * np.sqrt(self.t))
+        #print('gamm1: {}, gamma2: {}'.format(self.gamma, gamma))
+
  
     def get_all(self):
         self.get_price_delta()
         self.get_theta()
         self.get_gamma()
-        return self.calc_price, self.delta, self.theta, self.gamma
+        self.get_vega()
+        return self.calc_price, self.delta, self.theta, self.gamma, self.vega
  
  
     def get_impl_vol(self):

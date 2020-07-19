@@ -1,12 +1,12 @@
+# coding=utf-8
 from datetime import datetime
 
 
 from vnpy.app.cta_strategy.base import BacktestingMode
 from vnpy.app.cta_strategy.backtesting import BacktestingEngine, OptimizationSetting
-from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import (
-    OptionDeltaHedgeStrategy
-)
-from vnpy.trader.constant import OptionSMonth
+from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import OptionDeltaHedgeStrategy
+from vnpy.app.cta_strategy.strategies.delta_gamma_hedge_strategy import OptionDeltaGammaHedgeStrategy
+from vnpy.trader.constant import OptionSMonth, Direction
 
 
 engine = BacktestingEngine()
@@ -24,17 +24,42 @@ engine.set_parameters(
     end=datetime(2020, 6, 30),
     rate=0.3/10000,
     slippage=0,
-    size=300,
+    size=5000,
     capital=1_000_0,
     mode=BacktestingMode.BAR
 )
+
+#engine.add_strategy(
+#    OptionDeltaHedgeStrategy, 
+#    {'spot_symbol': '50etf',
+#     'option_level': -2,
+#     "num_day_before_expired": 50,
+#     "s_month_type": OptionSMonth.NEXT_SEASON,
+#     'hedge_interval': 15 # 隔多少天重新调仓
+#    })
+
 engine.add_strategy(
-    OptionDeltaHedgeStrategy, 
+    OptionDeltaGammaHedgeStrategy, 
     {'spot_symbol': '50etf',
-     'option_level': 1,
-     "num_day_before_expired": 20,
-     "s_month_type": OptionSMonth.NEXT_SEASON,
+     'option_configs':[
+         {
+            'level': -2,
+            "s_month_type": OptionSMonth.NEXT_MONTH,
+            'call_put': 'P',
+            'direction': Direction.LONG,
+         },
+         {
+            'level': -2,
+            "s_month_type": OptionSMonth.NEXT_SEASON,
+            'call_put': 'P',
+            'direction': Direction.SHORT,
+         }
+     ],
+     'num_day_before_expired': 15, # 多少天换仓一次
+     'hedge_interval': 15, # 隔多少天重新调仓
+     'win_len': 10, # 计算波动率的窗口大小
     })
+
 
 
 

@@ -279,7 +279,7 @@ class CtaTemplate(ABC):
         assert self.spot_symbol is not None
         l = []
         for symbol, pos in self.pos_dict.items():
-            if symbol != self.spot_symbol and pos > 0:
+            if symbol != self.spot_symbol and abs(pos) > 0:
                 l.append(symbol)
         return l
     

@@ -314,10 +314,13 @@ class BacktestingEngine:
 
         # Generate dataframe
         results = defaultdict(list)
-
+        acc_pnl = 0
         for daily_result in self.daily_results.values():
             for key, value in daily_result.__dict__.items():
                 results[key].append(value)
+            acc_pnl += daily_result.total_pnl
+            print('date: {}, pnl: {:.3f}, acc pnl: {:.3f}'.format(
+                daily_result.date, daily_result.total_pnl, acc_pnl))
 
         self.daily_df = DataFrame.from_dict(results).set_index("date")
 
@@ -788,10 +791,10 @@ class BacktestingEngine:
 
             if (order.direction == Direction.LONG and order.offset == Offset.OPEN) \
               or (order.direction == Direction.SHORT and order.offset == Offset.CLOSE):
-                trade_price = min(order.price, long_cross_price)
+                trade_price = long_cross_price
                 pos_change = order.volume
             else:
-                trade_price = max(order.price, short_cross_price)
+                trade_price = short_cross_price
                 pos_change = -order.volume
 
             trade = TradeData(
