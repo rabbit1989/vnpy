@@ -769,6 +769,7 @@ class BacktestingEngine:
                 if real_bar is None:
                     print('can not find real option bar for {}'.format(order.symbol))
                     continue
+                #print('cross_market_order(): symbol: {}'.format(real_bar.symbol))
                 long_cross_price = real_bar.open_price
                 short_cross_price = real_bar.open_price
             elif order.symbol != self.bar.symbol:
@@ -796,7 +797,8 @@ class BacktestingEngine:
             else:
                 trade_price = short_cross_price
                 pos_change = -order.volume
-
+            #print('cross_market_order(): symbol: {}, trade price: {}, pos_change: {}'.format(
+            #    real_bar.symbol, trade_price, pos_change))
             trade = TradeData(
                 symbol=order.symbol,
                 exchange=order.exchange,

@@ -123,7 +123,6 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
         hedged_delta = pos_s*delta_s + pos_l*delta_l + pos_spot
         hedged_gamma = pos_s*gamma_s + pos_l*gamma_l
         print('hedged delta: {:.3f}, hedged gamma: {:.3f}'.format(hedged_delta, hedged_gamma))
-        
         return pos_s, pos_l, pos_spot
 
 
@@ -136,7 +135,13 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
             for symbol in option_symbol_list:
                 num_day = bar.get_num_day_expired(symbol, bar.datetime.strftime("%Y%m%d"))
                 if num_day <= self.num_day_before_expired:
+                    print('======= 换仓时间到了========')
                     should_buy = True
+            
+            if (bar.datetime-self.last_hedge_day).days > self.hedge_interval:
+                print('======== 调仓时间到了 ========')
+                should_buy = True
+
             if should_buy is True:
                 # 卖掉手头的仓位
                 for symbol in option_symbol_list:
@@ -153,7 +158,6 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
             should_buy = True
 
         if should_buy is True:
-            # 买入仓位
             l = []
             for i, config in enumerate(self.option_configs):
                 s_month = self.get_smonth(bar.datetime, config['s_month_type'])
@@ -165,7 +169,7 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
                     level=config['level'],
                     s_month=s_month)
                 l.append((option_bar, s_month))
-            
+
             # 计算仓位使得delta和gamma均为0
             bar_l = l[0][0]
             bar_s = l[1][0]
@@ -179,13 +183,10 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
             theta_s = -greek_s['theta']
             vega_l = greek_l['vega']
             vega_s = -greek_s['vega']
-            
 
             print('===================================================')
 
-            # TODO: cal hedged pos
             pos_s, pos_l, pos_spot = self.cal_hedge_pos(delta_l, delta_s, gamma_l, gamma_s)
-
             if pos_s * pos_l < 0:
                 assert False
             if pos_s < 0 and pos_l < 0:
@@ -209,19 +210,15 @@ class OptionDeltaGammaHedgeStrategy(CtaTemplate):
                     theta_s, vega_s, greek_s['imp_vol']))
             
             print('买现货, 价: {}, buy_size: {}'.format(self.spot_close_price, pos_spot))
-            
+
+            # 买入仓位
             self.buy(bar_l.symbol, bar_l.close_price, pos_l, order_type=OrderType.MARKET)
             self.short(bar_s.symbol, bar_l.close_price, pos_s, order_type=OrderType.MARKET)
             self.buy(self.spot_symbol, self.spot_close_price, pos_spot, order_type=OrderType.MARKET)
-            
             print('total expected pos: {}'.format(abs(pos_l) + abs(pos_s) + abs(pos_spot)))
+            self.last_hedge_day = bar.datetime
         
-        # TODO: 调仓
-        #elif (bar.datetime-self.last_hedge_day).days > self.delta_hedge_day:
-        #                # TODO: 每隔一段时间调一次仓
-        #                #self.change_option_pos()
-        #                pass
-
+            
 
     def on_bar(self, bar):
         """
