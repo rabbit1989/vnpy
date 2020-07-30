@@ -2,22 +2,25 @@
 General utility functions.
 """
 
+from math import floor, ceil
 import json
 import logging
 import math
 import sys
+
+
+from dateutil.relativedelta import relativedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Dict, Tuple, Union
-from decimal import Decimal
-from math import floor, ceil
 
 import numpy as np
 import talib
 from scipy.stats import norm
 
-
 from .object import BarData, TickData
 from .constant import Exchange, Interval
+from vnpy.trader.constant import OrderType, OptionSMonth
 
 
 log_formatter = logging.Formatter('[%(asctime)s] %(message)s')
@@ -363,7 +366,7 @@ class ArrayManager(object):
         self.volume_array[-1] = bar.volume
         self.open_interest_array[-1] = bar.open_interest
         if self.count >= 2:
-            self.return_array[-1] = (self.close_array[-1] / self.close_array[-2] -1)
+            self.return_array[-1] = np.log(self.close_array[-1] / self.close_array[-2])
 
     @property
     def open(self) -> np.ndarray:
@@ -977,3 +980,28 @@ class Option:
         print(fs)
  
         return fs[0][0]
+
+def get_season_end_month(dt, season_offset = 0):
+    '''
+        获取当前月所在季度的第一个月
+    '''
+    year = int(dt.strftime('%Y'))
+    month = int(dt.strftime('%m'))
+    season_end_month = int((month-1)/3)*3 + 3
+
+    ans_year = year + int((season_end_month + season_offset*3-1)/12)
+    ans_month = (season_end_month + season_offset*3-1)%12 + 1
+    return '{}{:02d}'.format(ans_year, ans_month)
+
+
+def get_option_smonth(dt, s_month_type):
+    if s_month_type == OptionSMonth.CUR_MONTH:
+        return dt.strftime('%Y%m')
+    elif s_month_type == OptionSMonth.NEXT_MONTH:
+        return (dt + relativedelta(months=1)).strftime('%Y%m')
+    elif s_month_type == OptionSMonth.NEXT_SEASON:
+        return get_season_end_month(dt, 1)
+    elif s_month_type == OptionSMonth.NEXT_2SEASON:
+        return get_season_end_month(dt, 2)
+    else:
+        raise Exception("unknown s_month type {}".format(s_month_type))

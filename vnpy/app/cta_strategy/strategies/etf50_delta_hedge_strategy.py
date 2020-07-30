@@ -18,19 +18,8 @@ from vnpy.app.cta_strategy import (
 )
 from vnpy.trader.constant import OrderType, OptionSMonth
 from vnpy.trader.object import OptionBarData
-from vnpy.trader.utility import Option
+from vnpy.trader.utility import Option, get_option_smonth
 
-def get_season_end_month(dt, season_offset = 0):
-    '''
-        获取当前月所在季度的第一个月
-    '''
-    year = int(dt.strftime('%Y'))
-    month = int(dt.strftime('%m'))
-    season_end_month = int((month-1)/3)*3 + 3
-
-    ans_year = year + int((season_end_month + season_offset*3-1)/12)
-    ans_month = (season_end_month + season_offset*3-1)%12 + 1
-    return '{}{:02d}'.format(ans_year, ans_month)
 
 
 class OptionDeltaHedgeStrategy(CtaTemplate):
@@ -92,21 +81,9 @@ class OptionDeltaHedgeStrategy(CtaTemplate):
         pass
 
     
-    def get_smonth(self, dt, s_month_type):
-        if s_month_type == OptionSMonth.CUR_MONTH:
-            return dt.strftime('%Y%m')
-        elif s_month_type == OptionSMonth.NEXT_MONTH:
-            return (dt + relativedelta(months=1)).strftime('%Y%m')
-        elif s_month_type == OptionSMonth.NEXT_SEASON:
-            return get_season_end_month(dt, 1)
-        elif s_month_type == OptionSMonth.NEXT_2SEASON:
-            return get_season_end_month(dt, 2)
-        else:
-            raise Exception("unknown s_month type {}".format(s_month_type))
-    
     def buy_option(self, option_bar, call_put, level, s_month_type):
         #s_month = (option_bar.datetime + datetime.timedelta(month_day_offset)).strftime('%Y%m')
-        s_month = self.get_smonth(option_bar.datetime, s_month_type)
+        s_month = get_option_smonth(option_bar.datetime, s_month_type)
         print('cur month: {}, month type: {}, s month: {}'.format(
             option_bar.datetime.strftime('%Y%m'), s_month_type, s_month))
         bar = option_bar.get_real_bar(

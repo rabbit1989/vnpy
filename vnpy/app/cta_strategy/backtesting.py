@@ -13,15 +13,19 @@ import traceback
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pandas import DataFrame
+import talib
 from deap import creator, base, tools, algorithms
+from pandas import DataFrame
+from pyecharts import Kline,Overlap,Line
+
 
 from vnpy.app.portfolio_strategy.backtesting import PortfolioDailyResult
+from vnpy.app.cta_strategy import ArrayManager
 from vnpy.trader.constant import (Direction, Offset, Exchange,
                                   Interval, Status, OrderType)
 from vnpy.trader.database import database_manager
 from vnpy.trader.object import OrderData, TradeData, BarData, OptionBarData, TickData
-from vnpy.trader.utility import round_to
+from vnpy.trader.utility import round_to, Option, get_option_smonth
 
 from .base import (
     BacktestingMode,
@@ -249,7 +253,86 @@ class BacktestingEngine:
                 )
             config['cursor'] = cursor            
             self.output(f"{symbol} 数据量：{cursor.count()}")
-                
+
+    def show_option_params(self, param_list, call_put, level, s_month_type):
+        '''
+            
+        '''
+        win_len = 10
+        func = self.new_bar
+        gen_obj_func = lambda data: data.to_bar()
+        self.output("开始回放历史数据")
+        am_spot = ArrayManager(win_len)
+        times = []
+        param_dict = defaultdict(list)
+        spot_close_price = None
+        opt_symbol = None
+        opt_bar = None
+        realized_vol = None
+
+        while True:
+            bar = self.get_next_data(gen_obj_func)
+            if bar is None:
+                break
+            try:
+                if isinstance(bar, BarData) is True:
+                    spot_close_price = bar.close_price
+                    am_spot.update_bar(bar)
+                    realized_vol = talib.STDDEV(am_spot.return_array, win_len)[-1]
+                else:
+                    if spot_close_price:
+                        # 根据参数选出一个期权
+                        if opt_symbol is None or not opt_symbol in bar.options:
+                            s_month = get_option_smonth(bar.datetime, s_month_type)
+                            opt_bar = bar.get_real_bar(
+                                spot_price=spot_close_price, 
+                                call_put=call_put,
+                                level=level,
+                                s_month=s_month)
+                            opt_symbol = opt_bar.symbol
+
+                        # 计算希腊字母
+                        full_option_data = bar.options[opt_symbol]
+                        exp_date = datetime.strptime(full_option_data['delist_date'], '%Y%m%d')
+                        if abs(realized_vol) > 0.0000001:
+                            option = Option(full_option_data['call_put'], 
+                                            spot_close_price,
+                                            full_option_data['strike_price'],
+                                            bar.datetime.replace(tzinfo=None),
+                                            exp_date,
+                                            price=full_option_data['settle'],
+                                            vol=abs(realized_vol))
+
+                            calc_price, delta, theta, gamma, vega = option.get_all()
+                            imp_vol = option.get_impl_vol()
+                            d = {
+                                'realized_vol': realized_vol,
+                                'imp_vol': imp_vol,
+                                'delta': delta,
+                                'theta': theta,
+                                'gamma': gamma,
+                                'vega': vega,
+                                'calc_price': calc_price
+                            }
+                            print('cal price: {}, market price: {}'.format(calc_price, full_option_data['settle']))
+                            for param in param_list:
+                                param_dict[param].append(d[param])
+                            times.append(bar.datetime)
+            except Exception:
+                self.output("触发异常，回测终止")
+                self.output(traceback.format_exc())
+                return
+        figure_name = 'option_params'
+        overlap = Overlap()
+        for param in param_list:
+            line = Line(param)
+            line.add(param, times, param_dict[param], is_label_show=False)
+            overlap.add(line)
+
+        overlap.render(figure_name+'.html')
+        self.output("历史数据回放结束")
+    
+
     def run_backtesting(self):
         """"""
         if self.mode == BacktestingMode.BAR:
