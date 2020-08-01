@@ -278,11 +278,12 @@ class BacktestingEngine:
                 if isinstance(bar, BarData) is True:
                     spot_close_price = bar.close_price
                     am_spot.update_bar(bar)
-                    realized_vol = talib.STDDEV(am_spot.return_array, win_len)[-1]
+                    realized_vol = talib.STDDEV(am_spot.return_array, win_len)[-1] * np.sqrt(252)
                 else:
                     if spot_close_price:
                         # 根据参数选出一个期权
                         if opt_symbol is None or not opt_symbol in bar.options:
+                            print('期权调仓')
                             s_month = get_option_smonth(bar.datetime, s_month_type)
                             opt_bar = bar.get_real_bar(
                                 spot_price=spot_close_price, 
@@ -306,27 +307,31 @@ class BacktestingEngine:
                             calc_price, delta, theta, gamma, vega = option.get_all()
                             imp_vol = option.get_impl_vol()
                             d = {
-                                'realized_vol': realized_vol,
-                                'imp_vol': imp_vol,
+                                'realized_vol': round(realized_vol, 3),
+                                'imp_vol': round(imp_vol, 3),
                                 'delta': delta,
                                 'theta': theta,
                                 'gamma': gamma,
                                 'vega': vega,
-                                'calc_price': calc_price
+                                'calc_price': calc_price,
+                                'spot_price': round(spot_close_price, 3)
                             }
-                            print('cal price: {}, market price: {}'.format(calc_price, full_option_data['settle']))
+                            print('{} realize vol: {}, imp vol: {}, spot_price: {}'.format(
+                                bar.datetime.strftime("%F"), d['realized_vol'], d['imp_vol'], d['spot_price']
+                            ))
+                            #print('cal price: {:.3f}, market price: {:.3f}'.format(calc_price, full_option_data['settle']))
                             for param in param_list:
                                 param_dict[param].append(d[param])
-                            times.append(bar.datetime)
+                            times.append(bar.datetime.strftime('%F'))
             except Exception:
                 self.output("触发异常，回测终止")
                 self.output(traceback.format_exc())
                 return
-        figure_name = 'option_params'
+        figure_name = '_'.join(param_list)
         overlap = Overlap()
         for param in param_list:
             line = Line(param)
-            line.add(param, times, param_dict[param], is_label_show=False)
+            line.add(param, times, param_dict[param], is_label_show=True, is_datazoom_show=True)
             overlap.add(line)
 
         overlap.render(figure_name+'.html')

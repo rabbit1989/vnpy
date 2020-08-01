@@ -937,13 +937,14 @@ class Option:
         This function will iterate until finding the implied volatility
         """
         ITERATIONS = 100
-        ACCURACY = 0.01
+        ACCURACY = 0.001
         low_vol = 0
         high_vol = 1
         imp_vol = 0.5  ## It will try mid point and then choose new interval
         self.get_price_delta(imp_vol)
-        for _ in range(ITERATIONS):
-            #print('self.calc_price: {}, self.price: {}'.format(self.calc_price, self.price))
+        for i in range(ITERATIONS):
+            #print('iter: {}, self.calc_price: {:.3f}, self.price: {:.3f}, imp vol: {}'.format(
+            #   i, self.calc_price, self.price, imp_vol))
             if self.calc_price > self.price + ACCURACY:
                 high_vol = imp_vol
             elif self.calc_price < self.price - ACCURACY:
