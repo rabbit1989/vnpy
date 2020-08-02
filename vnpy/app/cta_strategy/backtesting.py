@@ -25,7 +25,8 @@ from vnpy.trader.constant import (Direction, Offset, Exchange,
                                   Interval, Status, OrderType)
 from vnpy.trader.database import database_manager
 from vnpy.trader.object import OrderData, TradeData, BarData, OptionBarData, TickData
-from vnpy.trader.utility import round_to, Option, get_option_smonth
+from vnpy.trader.utility import round_to, Option, get_option_smonth, date_diff
+
 
 from .base import (
     BacktestingMode,
@@ -254,12 +255,105 @@ class BacktestingEngine:
             config['cursor'] = cursor            
             self.output(f"{symbol} 数据量：{cursor.count()}")
 
-    def show_option_params(self, param_list, call_put, level, s_month_type):
+    def stat_vol(self, call_put, level, s_month_type, change_pos_day):
+        # 统计一下节假日day1/2/3的real_vol/imp_vol 均值/中位数
+        win_len = 20
+        gen_obj_func = lambda data: data.to_bar()
+        am_spot = ArrayManager(win_len)
+        self.output("开始回放历史数据")
+        dates = []
+        log_returns = defaultdict(list)
+        imp_vols = defaultdict(list)
+        results = defaultdict(dict)
+        spot_close_price = None
+        opt_symbol = None
+        while True:
+            bar = self.get_next_data(gen_obj_func)
+            if bar is None:
+                break
+            try:
+                if isinstance(bar, BarData) is True:
+                    spot_close_price = bar.close_price
+                    am_spot.update_bar(bar)
+                else:
+                    if spot_close_price:
+                        # 根据参数选出一个期权
+                        #print('{} {} {}'.format(len(log_returns['day1']), len(log_returns['day2']), len(log_returns['day3'])))
+                        if (opt_symbol is None or bar.get_num_day_expired(opt_symbol, bar.datetime.strftime("%Y%m%d")) < change_pos_day):
+                            s_month = get_option_smonth(bar.datetime, s_month_type)
+                            print('期权调仓: s_month: {}'.format(s_month))
+                            opt_bar = bar.get_real_bar(
+                                spot_price=spot_close_price, 
+                                call_put=call_put,
+                                level=level,
+                                s_month=s_month)
+                            opt_symbol = opt_bar.symbol
+
+                        # 计算隐含波动率
+                        full_option_data = bar.options[opt_symbol]
+                        exp_date = datetime.strptime(full_option_data['delist_date'], '%Y%m%d')
+                        option = Option(full_option_data['call_put'], 
+                                        spot_close_price,
+                                        full_option_data['strike_price'],
+                                        bar.datetime.replace(tzinfo=None),
+                                        exp_date,
+                                        price=full_option_data['settle'],
+                                        vol=0)
+
+                        imp_vol = option.get_impl_vol()
+
+                        # 更新 datetime
+                        dates.append(bar.datetime)
+                        # 更新数据
+                        day = None
+                        if len(dates) > 1 and date_diff(dates[-1], dates[-2]) > 1:
+                            #print('day1: {}, {}'.format(dates[-2], dates[-1]))
+                            day = 'day1'
+                        elif len(dates) > 2 and date_diff(dates[-1], dates[-2]) == 1 and date_diff(dates[-2], dates[-3]) > 1:
+                            day = 'day2'
+                            #print('day2: {}, {}, {}'.format(dates[-3], dates[-2], dates[-1]))
+                        elif len(dates) > 3 and date_diff(dates[-1], dates[-3]) == 2 and date_diff(dates[-3], dates[-4]) > 1:
+                            day = 'day3'
+                            #print('day3: {}, {}, {}, {}'.format(dates[-4], dates[-3], dates[-2], dates[-1]))
+                        elif len(dates) > 4 and date_diff(dates[-1], dates[-4]) == 3 and date_diff(dates[-4], dates[-5]) > 1:
+                            day = 'day4'
+                        elif len(dates) > 5 and date_diff(dates[-1], dates[-5]) == 4 and date_diff(dates[-5], dates[-6]) > 1:
+                            day = 'day5'
+                        if day:
+                            log_returns[day].append(am_spot.return_array[-1])
+                            imp_vols[day].append(imp_vol)
+                            #print('{} {} {:.3f} {:.3f}'.format(day, dates[-1], am_spot.return_array[-1], imp_vol))
+            except Exception:
+                self.output("触发异常，回测终止")
+                self.output(traceback.format_exc())
+                return
+        # 统计结果
+        for day in log_returns.keys():
+            results[day]['real_vol'] = talib.STDDEV(np.array(log_returns[day]), len(log_returns[day]))[-1] * np.sqrt(252)
+            results[day]['mean_imp_vol'] = np.mean(imp_vols[day])
+            results[day]['median_imp_vol'] = np.median(imp_vols[day])
+            results[day]['real_vol_len'] = len(log_returns[day])
+            results[day]['imp_vol_len'] = len(imp_vols[day])
+            
+        
+        print('======== results: ==========')
+        for k, v in results.items():
+            print('{}: {}'.format(k, v))
+        # for day in log_returns.keys():
+        #     returns = np.sort(log_returns[day])
+        #     vols = np.sort(imp_vols[day])
+        #     print('================ {} ==================='.format(day))
+        #     print('================ {} ==================='.format(day))
+        #     print('================ {} ==================='.format(day))
+        #     for a, b in zip(returns, vols):
+        #         print('{:.3f}, {:.3f}'.format(a, b))        
+
+
+    def show_option_params(self, param_list, call_put, level, s_month_type, change_pos_day):
         '''
             
         '''
         win_len = 10
-        func = self.new_bar
         gen_obj_func = lambda data: data.to_bar()
         self.output("开始回放历史数据")
         am_spot = ArrayManager(win_len)
@@ -282,7 +376,8 @@ class BacktestingEngine:
                 else:
                     if spot_close_price:
                         # 根据参数选出一个期权
-                        if opt_symbol is None or not opt_symbol in bar.options:
+                        if opt_symbol is None \
+                          or bar.get_num_day_expired(opt_symbol, bar.datetime.strftime("%Y%m%d")) < change_pos_day:
                             print('期权调仓')
                             s_month = get_option_smonth(bar.datetime, s_month_type)
                             opt_bar = bar.get_real_bar(
@@ -309,30 +404,34 @@ class BacktestingEngine:
                             d = {
                                 'realized_vol': round(realized_vol, 3),
                                 'imp_vol': round(imp_vol, 3),
-                                'delta': delta,
-                                'theta': theta,
-                                'gamma': gamma,
-                                'vega': vega,
-                                'calc_price': calc_price,
-                                'spot_price': round(spot_close_price, 3)
+                                'delta': round(delta, 3),
+                                'theta': round(theta, 4),
+                                'gamma': round(gamma, 4),
+                                'vega': round(vega, 4),
+                                'calc_price': round(calc_price, 4),
+                                'spot_price': round(spot_close_price, 3),
+                                'op_price': full_option_data['settle'],
+                                'k': full_option_data['strike_price'],
                             }
-                            print('{} realize vol: {}, imp vol: {}, spot_price: {}'.format(
-                                bar.datetime.strftime("%F"), d['realized_vol'], d['imp_vol'], d['spot_price']
-                            ))
-                            #print('cal price: {:.3f}, market price: {:.3f}'.format(calc_price, full_option_data['settle']))
+                            print('{} {}'.format(bar.datetime.strftime("%F"), d))
                             for param in param_list:
                                 param_dict[param].append(d[param])
                             times.append(bar.datetime.strftime('%F'))
             except Exception:
                 self.output("触发异常，回测终止")
                 self.output(traceback.format_exc())
-                return
         figure_name = '_'.join(param_list)
         overlap = Overlap()
         for param in param_list:
             line = Line(param)
+            # 如果是现货，换一个坐标轴显示
+            new_axis = False
+            yaxis_index = 0
+            if param == 'spot_price':
+                new_axis = True
+                yaxis_index = 1             
             line.add(param, times, param_dict[param], is_label_show=True, is_datazoom_show=True)
-            overlap.add(line)
+            overlap.add(line, yaxis_index=yaxis_index, is_add_yaxis=new_axis)
 
         overlap.render(figure_name+'.html')
         self.output("历史数据回放结束")

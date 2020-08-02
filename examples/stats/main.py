@@ -30,11 +30,19 @@ def show_volatility():
         mode=BacktestingMode.BAR
     )
     engine.load_data()
-    engine.show_option_params(
-        param_list=['realized_vol', 'imp_vol'], 
+    #engine.show_option_params(
+    #    param_list=['realized_vol', 'imp_vol', 'spot_price'], 
+    #    call_put='C', 
+    #    level=-1, 
+    #    s_month_type=OptionSMonth.NEXT_SEASON, 
+    #    change_pos_day=30)
+
+    engine.stat_vol(
         call_put='C', 
         level=-1, 
-        s_month_type=OptionSMonth.NEXT_MONTH)
+        s_month_type=OptionSMonth.NEXT_MONTH, 
+        change_pos_day=15)
+
 
 
 if __name__ == '__main__':

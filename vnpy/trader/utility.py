@@ -861,7 +861,7 @@ class Option:
         if self.t == 0: self.t = 0.000001 ## Case valuation in expiration date
         self.price = price
         self.call_put = call_put   ## 'C' or 'P'
-        self.div = div
+
  
     def calculate_t(self):
         return (self.exp_date - self.eval_date).days / 365.0
@@ -869,13 +869,13 @@ class Option:
     def get_price_delta(self, vol=None):
         if vol is None:
             vol = self.vol
-        d1 = ( math.log(self.s/self.k) + (self.rf + self.div + math.pow(vol, 2)/2 ) * self.t) / (vol * math.sqrt(self.t) )
+        d1 = ( math.log(self.s/self.k) + (self.rf + math.pow(vol, 2)/2 ) * self.t) / (vol * math.sqrt(self.t) )
         d2 = d1 - vol * math.sqrt(self.t)
         if self.call_put == 'C':
-            self.calc_price = (norm.cdf(d1) * self.s * math.exp(-self.div*self.t) - norm.cdf(d2) * self.k * math.exp( -self.rf * self.t ))
+            self.calc_price = (norm.cdf(d1)*self.s - norm.cdf(d2)*self.k*math.exp(-self.rf * self.t))
             self.delta = norm.cdf(d1)
         elif self.call_put == 'P':
-            self.calc_price =  ( -norm.cdf(-d1) * self.s * math.exp(-self.div*self.t) + norm.cdf(-d2) * self.k * math.exp( -self.rf * self.t ) )
+            self.calc_price =  (norm.cdf(-d2)*self.k*math.exp(-self.rf*self.t) - norm.cdf(-d1)*self.s)
             self.delta = -norm.cdf(-d1) 
  
     def get_call(self):
@@ -1006,3 +1006,6 @@ def get_option_smonth(dt, s_month_type):
         return get_season_end_month(dt, 2)
     else:
         raise Exception("unknown s_month type {}".format(s_month_type))
+
+def date_diff(date1, date2):
+    return abs((date1-date2).days)
