@@ -876,7 +876,8 @@ class Option:
             self.delta = norm.cdf(d1)
         elif self.call_put == 'P':
             self.calc_price =  (norm.cdf(-d2)*self.k*math.exp(-self.rf*self.t) - norm.cdf(-d1)*self.s)
-            self.delta = -norm.cdf(-d1) 
+            self.delta = -norm.cdf(-d1)
+        return self.calc_price, self.delta
  
     def get_call(self):
         d1 = ( math.log(self.s/self.k) + ( self.rf + math.pow( self.vol, 2)/2 ) * self.t ) / ( self.vol * math.sqrt(self.t) )

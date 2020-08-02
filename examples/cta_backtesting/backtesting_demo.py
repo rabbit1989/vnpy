@@ -6,6 +6,7 @@ from vnpy.app.cta_strategy.base import BacktestingMode
 from vnpy.app.cta_strategy.backtesting import BacktestingEngine, OptimizationSetting
 from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import OptionDeltaHedgeStrategy
 from vnpy.app.cta_strategy.strategies.delta_gamma_hedge_strategy import OptionDeltaGammaHedgeStrategy
+from vnpy.app.cta_strategy.strategies.realized_vol_strategy import RealizedVolStrategy
 from vnpy.trader.constant import OptionSMonth, Direction
 
 
@@ -21,7 +22,7 @@ engine.set_parameters(
     },
     interval="d",
     start=datetime(2017, 12, 1),
-    end=datetime(2020, 6, 30),
+    end=datetime(2020, 7, 1),
     rate=0.3/10000,
     slippage=0,
     size=5000,
@@ -29,7 +30,8 @@ engine.set_parameters(
     mode=BacktestingMode.BAR
 )
 
-#engine.add_strategy(
+
+# engine.add_strategy(
 #    OptionDeltaHedgeStrategy, 
 #    {'spot_symbol': '50etf',
 #     'option_level': -2,
@@ -38,29 +40,37 @@ engine.set_parameters(
 #     'hedge_interval': 15 # 隔多少天重新调仓
 #    })
 
+
+# engine.add_strategy(
+#     OptionDeltaGammaHedgeStrategy, 
+#     {'spot_symbol': '50etf',
+#      'option_configs':[
+#          {
+#             'level': -2,
+#             "s_month_type": OptionSMonth.NEXT_MONTH,
+#             'call_put': 'P',
+#             'direction': Direction.LONG,
+#          },
+#          {
+#             'level': -2,
+#             "s_month_type": OptionSMonth.NEXT_SEASON,
+#             'call_put': 'P',
+#             'direction': Direction.SHORT,
+#          }
+#      ],
+#      'num_day_before_expired': 15, # 多少天换仓一次
+#      'hedge_interval': 10, # 隔多少天重新调仓
+#      'win_len': 10, # 计算波动率的窗口大小
+#     })
+
+
 engine.add_strategy(
-    OptionDeltaGammaHedgeStrategy, 
+    OptionDeltaHedgeStrategy, 
     {'spot_symbol': '50etf',
-     'option_configs':[
-         {
-            'level': -2,
-            "s_month_type": OptionSMonth.NEXT_MONTH,
-            'call_put': 'P',
-            'direction': Direction.LONG,
-         },
-         {
-            'level': -2,
-            "s_month_type": OptionSMonth.NEXT_SEASON,
-            'call_put': 'P',
-            'direction': Direction.SHORT,
-         }
-     ],
-     'num_day_before_expired': 15, # 多少天换仓一次
-     'hedge_interval': 15, # 隔多少天重新调仓
-     'win_len': 10, # 计算波动率的窗口大小
+     'option_level': -1,
+     "s_month_type": OptionSMonth.NEXT_SEASON,
+     'call_put': 'C'
     })
-
-
 
 
 engine.load_data()
