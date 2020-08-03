@@ -179,7 +179,7 @@ class OptionBarData(BaseData):
             获取指定档位/类型的期权
             level 为正表示实值期权，为负表示虚值
         '''
-        print('OptionBarData.get_real_bar():  prop_based_dict: {}'.format(self.prop_based_dict[call_put].keys()))
+        #print('OptionBarData.get_real_bar():  prop_based_dict: {}'.format(self.prop_based_dict[call_put].keys()))
         small_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month].items() if price < spot_price]
         big_bar_list = [(price, bar) for price, bar in self.prop_based_dict[call_put][s_month].items() if price >= spot_price]
         small_bar_list = sorted(small_bar_list, key=lambda x: x[0], reverse=True)

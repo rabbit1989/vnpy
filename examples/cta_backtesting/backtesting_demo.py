@@ -65,7 +65,7 @@ engine.set_parameters(
 
 
 engine.add_strategy(
-    OptionDeltaHedgeStrategy, 
+    RealizedVolStrategy, 
     {'spot_symbol': '50etf',
      'option_level': -1,
      "s_month_type": OptionSMonth.NEXT_SEASON,
