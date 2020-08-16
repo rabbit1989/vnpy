@@ -342,6 +342,7 @@ class ArrayManager(object):
         self.volume_array: np.ndarray = np.zeros(size)
         self.open_interest_array: np.ndarray = np.zeros(size)
         self.return_array: np.ndarray = np.zeros(size)
+        self.vol_array: np.ndarray = np.zeros(size)
 
     def update_bar(self, bar: BarData) -> None:
         """
@@ -358,6 +359,7 @@ class ArrayManager(object):
         self.volume_array[:-1] = self.volume_array[1:]
         self.open_interest_array[:-1] = self.open_interest_array[1:]
         self.return_array[:-1] = self.return_array[1:]
+        self.vol_array[:-1] = self.vol_array[1:]
 
         self.open_array[-1] = bar.open_price
         self.high_array[-1] = bar.high_price
@@ -367,6 +369,8 @@ class ArrayManager(object):
         self.open_interest_array[-1] = bar.open_interest
         if self.count >= 2:
             self.return_array[-1] = np.log(self.close_array[-1] / self.close_array[-2])
+            self.vol_array[-1] = talib.STDDEV(self.return_array, self.size)[-1] * np.sqrt(252)
+
 
     @property
     def open(self) -> np.ndarray:
@@ -861,6 +865,16 @@ class Option:
         if self.t == 0: self.t = 0.000001 ## Case valuation in expiration date
         self.price = price
         self.call_put = call_put   ## 'C' or 'P'
+
+        # print('k: {}, s: {}, rf: {}, vol: {}, eval_date: {}, exp_date: {}, t: {}'.format(
+        #     self.k,
+        #     self.s,
+        #     self.rf,
+        #     self.vol,
+        #     self.eval_date,
+        #     self.exp_date,
+        #     self.t,
+        # ))
 
  
     def calculate_t(self):
