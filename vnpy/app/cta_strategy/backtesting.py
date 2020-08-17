@@ -353,7 +353,7 @@ class BacktestingEngine:
         '''
             
         '''
-        win_len = 10
+        win_len = 5
         gen_obj_func = lambda data: data.to_bar()
         self.output("开始回放历史数据")
         am_spot = ArrayManager(win_len)
@@ -363,7 +363,7 @@ class BacktestingEngine:
         opt_symbol = None
         opt_bar = None
         realized_vol = None
-
+        trade_day_set = set()
         while True:
             bar = self.get_next_data(gen_obj_func)
             if bar is None:
@@ -417,6 +417,7 @@ class BacktestingEngine:
                             for param in param_list:
                                 param_dict[param].append(d[param])
                             times.append(bar.datetime.strftime('%F'))
+                            trade_day_set.add(bar.datetime.strftime('%F'))
             except Exception:
                 self.output("触发异常，回测终止")
                 self.output(traceback.format_exc())
@@ -434,6 +435,7 @@ class BacktestingEngine:
             overlap.add(line, yaxis_index=yaxis_index, is_add_yaxis=new_axis)
 
         overlap.render(figure_name+'.html')
+        print('{}'.format(trade_day_set))
         self.output("历史数据回放结束")
     
 

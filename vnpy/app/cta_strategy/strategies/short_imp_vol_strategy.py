@@ -32,6 +32,11 @@ trade_day_set = (
 '2020-03-18', '2018-05-31', '2018-11-01', '2020-03-03', '2019-02-11', '2019-07-08', '2018-01-12', '2020-05-18', '2019-09-17', '2020-01-16', '2019-02-15', '2019-01-11', '2018-09-04', '2019-01-03', '2019-01-31', '2018-08-09', '2018-11-02', '2019-05-10', '2019-07-19', '2020-05-29', '2018-12-19', '2018-01-18', '2018-07-31', '2020-04-23', '2019-10-30', '2019-10-10', '2019-07-23', '2019-01-10', '2018-09-21', '2019-11-14', '2018-06-05', '2020-02-26', '2019-08-12', '2019-05-13', '2018-03-07', '2018-03-22', '2019-03-14', '2019-05-29', '2019-01-21', '2020-02-27', '2019-04-15', '2018-10-23', '2018-01-23', '2019-10-16', '2018-10-19', '2019-08-23', '2018-12-06', '2018-10-10', '2018-06-12', '2019-08-02', '2017-12-20', '2020-06-01', '2018-03-05', 
 '2018-04-18', '2018-05-25', '2020-02-07', '2019-04-26', '2020-06-02', '2019-08-21', '2019-06-18', '2020-05-21', '2018-06-01', '2019-06-20', '2019-04-19', '2018-07-12', '2018-07-10', '2018-08-02', '2020-06-10', '2018-09-12', '2019-10-22', '2019-11-28', '2018-01-31', '2019-10-31', '2018-04-24', '2018-04-04', '2020-02-28', '2020-01-03', '2017-12-22', '2018-02-14', '2019-01-28', '2018-12-04', '2020-03-26', '2020-04-07', '2019-11-01', '2020-03-31', '2019-02-18'})
 
+class PosState:
+    Long = 'long'
+    Short = 'short'
+    Empty = 'empty'
+
 
 def no_trade_in_days(dt, start_delta, end_delta):
     cnt = 0
@@ -41,9 +46,11 @@ def no_trade_in_days(dt, start_delta, end_delta):
             cnt += 1
     return cnt >= end_delta-start_delta
 
+
 class ShortImpVolStrategy(CtaTemplate):
     '''
-        rv 低于 iv，做空波动率，rv 高于 iv 空仓，大假前空仓
+        1.rv 低于 iv，做空波动率，rv 高于 iv 空仓，大假前空仓
+        2. iv 高于k日最高，做多波动率， 买入后高于0.3平仓 或低于k日品藏
     '''
     author = "white"
 
@@ -52,7 +59,7 @@ class ShortImpVolStrategy(CtaTemplate):
     call_put = 'C'
     s_month_type = OptionSMonth.NEXT_MONTH
     fixed_size = 1
-    win_len = 10
+    win_len = 5
     break_percent = 0
 
     parameters = [
@@ -71,11 +78,7 @@ class ShortImpVolStrategy(CtaTemplate):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
         self.am_spot = ArrayManager(self.win_len)
         self.spot_close_price = None
-        self.should_buy = False
-        self.should_sell = False
         self.iv_array = []
-        self.local_max = False
-        self.local_min = False
         
 
     def on_init(self):
@@ -103,6 +106,7 @@ class ShortImpVolStrategy(CtaTemplate):
         pass
     
     
+
     def short_volatility(self, option_bar, option):
         _, delta = option.get_price_delta()
         option_pos = self.fixed_size/delta
@@ -112,6 +116,18 @@ class ShortImpVolStrategy(CtaTemplate):
         self.short(option_bar.symbol, option_bar.close_price, option_pos, order_type=OrderType.MARKET)
         # 买入现货
         self.buy(self.spot_symbol, self.spot_close_price, self.fixed_size, order_type=OrderType.MARKET)
+
+
+    def buy_volatility(self, option_bar, option):
+        _, delta = option.get_price_delta()
+        option_pos = self.fixed_size/delta
+            #print('fixed size: {}, delta: {:3f}, cal_price: {:3f}, opt price: {} option_pos: {:.3f}'.format(
+            #    self.fixed_size, delta, cal_price, full_option_data['settle'], option_pos))
+        # 买入期权
+        self.buy(option_bar.symbol, option_bar.close_price, option_pos, order_type=OrderType.MARKET)
+        # 卖空现货
+        self.short(self.spot_symbol, self.spot_close_price, self.fixed_size, order_type=OrderType.MARKET)
+
 
 
     def on_bar(self, bar):
@@ -124,14 +140,17 @@ class ShortImpVolStrategy(CtaTemplate):
 
 
         elif isinstance(bar, OptionBarData) is True and self.spot_close_price is not None:
-            option_symbol_list = self.get_option_list()            
-            s_month = get_option_smonth(bar.datetime, self.s_month_type)
-            option_bar = bar.get_real_bar(
-                spot_price=self.spot_close_price, 
-                call_put=self.call_put,
-                level=self.option_level,
-                s_month=s_month)
-            
+            option_symbol_list = self.get_option_list()
+            #if not option_symbol_list:            
+            if True:
+                s_month = get_option_smonth(bar.datetime, self.s_month_type)
+                option_bar = bar.get_real_bar(
+                    spot_price=self.spot_close_price, 
+                    call_put=self.call_put,
+                    level=self.option_level,
+                    s_month=s_month)
+            #else:
+            #    option_bar = bar.symbol_based_dict[option_symbol_list[0]]
             rv = self.am_spot.vol_array[-1]
             full_option_data = bar.options[option_bar.symbol]
             exp_date = datetime.datetime.strptime(full_option_data['delist_date'], '%Y%m%d')
@@ -147,8 +166,8 @@ class ShortImpVolStrategy(CtaTemplate):
             # 判断突破信号
             pre_max_vol = None
             pre_min_vol = None
-            self.local_max = False
-            self.local_min = False
+            local_max = False
+            local_min = False
             if len(self.iv_array) >= self.win_len:
                 pre_max_vol = np.max(self.iv_array)
                 pre_min_vol = np.min(self.iv_array)
@@ -159,21 +178,41 @@ class ShortImpVolStrategy(CtaTemplate):
                 cur_max_vol = np.max(self.iv_array)
                 cur_min_vol = np.min(self.iv_array) 
                 if cur_max_vol / pre_max_vol > 1+self.break_percent:
-                    self.local_max = True
+                    local_max = True
                 elif cur_min_vol / pre_min_vol < 1-self.break_percent:
-                    self.local_min = True
+                    local_min = True
             
-            if (no_trade_in_days(bar.datetime, 2, 6) and option_symbol_list) or \
-              (option_symbol_list and (rv > iv or self.local_max is True)):
+            # 判断仓位状态
+            pos_state = PosState.Empty
+            if option_symbol_list:
+                option_symbol = option_symbol_list[0]
+                if self.pos_dict[option_symbol] > 0:
+                    pos_state = PosState.Long
+                else:
+                    pos_state = PosState.Short
+
+
+            if (no_trade_in_days(bar.datetime, 2, 6) and pos_state == PosState.Short) or \
+              (pos_state == PosState.Short and (rv > iv or local_max is True)):
                 # 两种情况会清仓: 
                 # (1): 如果长假快到了且持仓
                 # (2): 如果持仓且 (rv大于iv or iv 高于k日线)
-                option_symbol = option_symbol_list[0]
-                self.sell(option_symbol, None, self.pos_dict[option_symbol], order_type=OrderType.MARKET)
-                self.cover(self.spot_symbol, None, -self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
-            elif not option_symbol_list and rv < iv and abs(rv) > 0.00001 and self.local_min is True:
+
+                self.cover(option_symbol, None, -self.pos_dict[option_symbol], order_type=OrderType.MARKET)
+                self.sell(self.spot_symbol, None, self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
+            elif pos_state == PosState.Empty and rv < iv and abs(rv) > 0.00001 and local_min is True:
                 # 如果空仓且rv小于iv且iv低于k日线, 则卖出波动率                    
                 self.short_volatility(option_bar, option)
+            elif pos_state == PosState.Empty and (local_max is True or no_trade_in_days(bar.datetime, 2, 6)):
+                # 如果空仓且(达到localmax, 或长假快到了)， 做多
+                self.buy_volatility(option_bar, option)
+            elif pos_state == PosState.Long and (iv > 0.3 or local_min is True):
+                # 如果持有多仓，且 (iv > 0.3 或 local_min到了），则清仓
+                self.sell(option_symbol, None, self.pos_dict[option_symbol], order_type=OrderType.MARKET)
+                self.cover(self.spot_symbol, None, -self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
+            
+
+
         self.put_event()
 
     def on_order(self, order: OrderData):

@@ -4,6 +4,7 @@ import datetime
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 
+
 import numpy as np
 import talib
 
@@ -17,7 +18,7 @@ from vnpy.app.cta_strategy import (
     BarGenerator,
     ArrayManager,
 )
-from vnpy.trader.constant import OrderType, OptionSMonth
+from vnpy.trader.constant import OrderType, OptionSMonth, Direction
 from vnpy.trader.object import OptionBarData
 from vnpy.trader.utility import Option, get_option_smonth
 
@@ -35,7 +36,7 @@ trade_day_set = (
 
 class RealizedVolStrategy(CtaTemplate):
     '''
-        一个简单的买入已实现波动率策略
+        一个简单的买入已实现波动率策略，节假日前买入波动率，节假日后卖出
     '''
     author = "white"
 
@@ -64,6 +65,7 @@ class RealizedVolStrategy(CtaTemplate):
         self.spot_close_price = None
         self.last_hedge_day = None
         self.delta_dict = defaultdict(list)
+        self.last_trade_date = None
 
     def on_init(self):
         """
@@ -97,7 +99,37 @@ class RealizedVolStrategy(CtaTemplate):
         if isinstance(bar, BarData) is True:
             self.spot_close_price = bar.close_price
             self.am_spot.update_bar(bar)
-        elif isinstance(bar, OptionBarData) is True and self.spot_close_price is not None:   
+        elif isinstance(bar, OptionBarData) is True and self.spot_close_price is not None:
+            
+            ######### 临时加的代码，如果有仓位，把期权参数打印一下
+            date_str = bar.datetime.strftime('%F')
+            if date_str == self.last_trade_date:
+                trade_symbol = self.last_trade_symbol
+                vol = talib.STDDEV(self.am_spot.return_array, self.win_len)[-1]* np.sqrt(252)
+                full_option_data = bar.options[trade_symbol]
+                exp_date = datetime.datetime.strptime(full_option_data['delist_date'], '%Y%m%d')
+                option = Option(full_option_data['call_put'], 
+                                self.spot_close_price,
+                                full_option_data['strike_price'],
+                                bar.datetime.replace(tzinfo=None),
+                                exp_date,
+                                price=full_option_data['settle'],
+                                vol=abs(vol))
+                _, delta, theta, gamma, vega = option.get_all()
+                imp_vol = option.get_impl_vol()
+                print('hold symbol {}, {}, detla:{:.3f}, theta:{:.4f}, gamma:{:.3f}, vega: {:.3f} vol: {:.3f}, imp_vol: {:.3f}'.format(
+                    trade_symbol,
+                    bar.datetime.replace(tzinfo=None),
+                    delta, 
+                    theta, 
+                    gamma, 
+                    vega, 
+                    vol,
+                    imp_vol))
+                print('==================================================')
+            ######################
+
+
             # 如果明天的明天是节假日就买入
             next_date = (bar.datetime + datetime.timedelta(1)).strftime('%F')
             next_next_date = (bar.datetime + datetime.timedelta(2)).strftime('%F')
@@ -123,11 +155,11 @@ class RealizedVolStrategy(CtaTemplate):
                                     vol=abs(vol))
                     cal_price, delta = option.get_price_delta()
                     option_pos = self.fixed_size/delta
-                    print('fixed size: {}, delta: {}, cal_price: {}, opt price: {} option_pos: {}'.format(
-                        self.fixed_size, delta, cal_price, full_option_data['settle'], option_pos))
+                    #print('fixed size: {}, delta: {:3f}, cal_price: {:3f}, opt price: {} option_pos: {:.3f}'.format(
+                    #    self.fixed_size, delta, cal_price, full_option_data['settle'], option_pos))
+
                     # 买入期权
                     self.buy(option_bar.symbol, option_bar.close_price, option_pos, order_type=OrderType.MARKET)
-
                     # 卖出现货
                     self.short(self.spot_symbol, self.spot_close_price, self.fixed_size, order_type=OrderType.MARKET)
             else: 
@@ -149,7 +181,15 @@ class RealizedVolStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
-        #print('on_trade: {}'.format(trade))
+        print('on_trade: {}, {}, {}, {:.3f}, total_price: {:.3f},  {},'.format(
+            trade.datetime.strftime('%F'), 
+            trade.direction, 
+            trade.price, 
+            trade.volume,
+            trade.volume*trade.price, 
+            trade.symbol))
+        self.last_trade_date = trade.datetime.strftime('%F')
+        self.last_trade_symbol = trade.symbol
         self.put_event()
 
     def on_stop_order(self, stop_order: StopOrder):
