@@ -191,22 +191,34 @@ class ShortImpVolStrategy(CtaTemplate):
                 else:
                     pos_state = PosState.Short
 
+            long_holiday_come = no_trade_in_days(bar.datetime, 2, 6)
 
-            if (no_trade_in_days(bar.datetime, 2, 6) and pos_state == PosState.Short) or \
+            if (long_holiday_come is True and pos_state == PosState.Short) or \
               (pos_state == PosState.Short and (rv > iv or local_max is True)):
                 # 两种情况会清仓: 
                 # (1): 如果长假快到了且持仓
                 # (2): 如果持仓且 (rv大于iv or iv 高于k日线)
-
+                print('=========================================')
+                print('====== clear pos: long holiday: {}, pos_state: {}, rv: {:.3f}, iv: {:.3f}, local_max: {}'.format(
+                    long_holiday_come, pos_state, rv, iv, local_max))
                 self.cover(option_symbol, None, -self.pos_dict[option_symbol], order_type=OrderType.MARKET)
                 self.sell(self.spot_symbol, None, self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
             elif pos_state == PosState.Empty and rv < iv and abs(rv) > 0.00001 and local_min is True:
+                print('=========================================')
+                print('======short_volatility======= rv: {:.3f}, iv: {:.3f}'.format(rv, iv))
+                
                 # 如果空仓且rv小于iv且iv低于k日线, 则卖出波动率                    
                 self.short_volatility(option_bar, option)
-            elif pos_state == PosState.Empty and (local_max is True or no_trade_in_days(bar.datetime, 2, 6)):
+            elif pos_state == PosState.Empty and (local_max is True or long_holiday_come is True):
+                print('=========================================')
+                print('======buy_volatility=======: local_max: {}, long holiday: {}'.format(local_max, long_holiday_come))
                 # 如果空仓且(达到localmax, 或长假快到了)， 做多
                 self.buy_volatility(option_bar, option)
             elif pos_state == PosState.Long and (iv > 0.3 or local_min is True):
+                print('=========================================')
+                print('====== clear pos: pos_state: {}, iv: {:.3f}, local_min: {}'.format(
+                    pos_state, iv, local_min))
+                
                 # 如果持有多仓，且 (iv > 0.3 或 local_min到了），则清仓
                 self.sell(option_symbol, None, self.pos_dict[option_symbol], order_type=OrderType.MARKET)
                 self.cover(self.spot_symbol, None, -self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
@@ -225,14 +237,13 @@ class ShortImpVolStrategy(CtaTemplate):
         """
         Callback of new trade data update.
         """
-        print('on_trade: {}, {}, {}, {}, {:.3f}, total_price: {:.3f},  {},'.format(
+        print('on_trade: {}, {}, {}, {}, {:.3f}, {:.3f},'.format(
             trade.datetime.strftime('%F'), 
+            trade.symbol,
             trade.direction, 
             trade.offset,
             trade.price, 
-            trade.volume,
-            trade.volume*trade.price, 
-            trade.symbol))
+            trade.volume))
         self.last_trade_date = trade.datetime.strftime('%F')
         self.last_trade_symbol = trade.symbol
         self.put_event()
