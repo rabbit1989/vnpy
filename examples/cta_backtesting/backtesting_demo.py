@@ -8,6 +8,7 @@ from vnpy.app.cta_strategy.strategies.etf50_delta_hedge_strategy import OptionDe
 from vnpy.app.cta_strategy.strategies.delta_gamma_hedge_strategy import OptionDeltaGammaHedgeStrategy
 from vnpy.app.cta_strategy.strategies.realized_vol_strategy import RealizedVolStrategy
 from vnpy.app.cta_strategy.strategies.channel_break_vol_strategy import ChannelBreakVolStrategy
+from vnpy.app.cta_strategy.strategies.channel_break_imp_vol_strategy_v2 import ChannelBreakImpVolStrategyV2
 from vnpy.app.cta_strategy.strategies.short_imp_vol_strategy import ShortImpVolStrategy
 from vnpy.trader.constant import OptionSMonth, Direction
 
@@ -83,13 +84,23 @@ engine.set_parameters(
 #    })
 
 
+# engine.add_strategy(
+#     ShortImpVolStrategy, 
+#     {'spot_symbol': '50etf',
+#      'option_level': -1,
+#      "s_month_type": OptionSMonth.NEXT_SEASON,
+#      'call_put': 'C'
+#     })
+
 engine.add_strategy(
-    ShortImpVolStrategy, 
+    ChannelBreakImpVolStrategyV2, 
     {'spot_symbol': '50etf',
      'option_level': -1,
      "s_month_type": OptionSMonth.NEXT_SEASON,
      'call_put': 'C'
     })
+
+
 
 engine.load_data()
 engine.run_backtesting()
