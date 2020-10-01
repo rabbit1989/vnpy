@@ -376,16 +376,15 @@ class BacktestingEngine:
                 else:
                     if spot_close_price:
                         # 根据参数选出一个期权
-                        if opt_symbol is None \
-                          or bar.get_num_day_expired(opt_symbol, bar.datetime.strftime("%Y%m%d")) < change_pos_day:
-                            print('期权调仓')
-                            s_month = get_option_smonth(bar.datetime, s_month_type)
-                            opt_bar = bar.get_real_bar(
-                                spot_price=spot_close_price, 
-                                call_put=call_put,
-                                level=level,
-                                s_month=s_month)
-                            opt_symbol = opt_bar.symbol
+                        #if opt_symbol is None \
+                        #  or bar.get_num_day_expired(opt_symbol, bar.datetime.strftime("%Y%m%d")) < change_pos_day:
+                        s_month = get_option_smonth(bar.datetime, s_month_type)
+                        opt_bar = bar.get_real_bar(
+                            spot_price=spot_close_price, 
+                            call_put=call_put,
+                            level=level,
+                            s_month=s_month)
+                        opt_symbol = opt_bar.symbol
 
                         # 计算希腊字母
                         full_option_data = bar.options[opt_symbol]
@@ -401,6 +400,7 @@ class BacktestingEngine:
 
                             calc_price, delta, theta, gamma, vega = option.get_all()
                             imp_vol = option.get_impl_vol()
+                            bar_date = bar.datetime.strftime("%F")
                             d = {
                                 'realized_vol': round(realized_vol, 3),
                                 'imp_vol': round(imp_vol, 3),
@@ -412,14 +412,15 @@ class BacktestingEngine:
                                 'spot_price': round(spot_close_price, 3),
                                 'op_price': full_option_data['settle'],
                                 'k': full_option_data['strike_price'],
+                                'vol': full_option_data['vol'],
+                                'date': bar_date
                             }
-                            print('{} {}'.format(bar.datetime.strftime("%F"), d))
+                            print('{} {}'.format(bar_date, d))
                             for param in param_list:
                                 param_dict[param].append(d[param])
-                            times.append(bar.datetime.strftime('%F'))
-                            trade_day_set.add(bar.datetime.strftime('%F'))
+                            times.append(bar_date)
+                            trade_day_set.add(bar_date)
             except Exception:
-                self.output("触发异常，回测终止")
                 self.output(traceback.format_exc())
         figure_name = '_'.join(param_list)
         overlap = Overlap()
@@ -428,7 +429,7 @@ class BacktestingEngine:
             # 如果是现货，换一个坐标轴显示
             new_axis = False
             yaxis_index = 0
-            if param == 'spot_price':
+            if param in ['spot_price', 'op_price', 'vol']:
                 new_axis = True
                 yaxis_index = 1             
             line.add(param, times, param_dict[param], is_label_show=True, is_datazoom_show=True)
@@ -437,6 +438,7 @@ class BacktestingEngine:
         overlap.render(figure_name+'.html')
         print('{}'.format(trade_day_set))
         self.output("历史数据回放结束")
+        return param_dict
     
 
     def run_backtesting(self):
@@ -1434,7 +1436,9 @@ class BacktestingEngine:
             min_index = 0
             for i, ele in enumerate(self.data_cache_list):
                 raw_data = ele[0]
-                if min_date_time is None or raw_data['datetime'] < min_date_time:
+                # 这里加了一个补丁，日期相同时，先处理现货symbol
+                if min_date_time is None or (raw_data['datetime'] < min_date_time or 
+                  (raw_data['datetime'] == min_date_time and not 'option' in raw_data['symbol'])):
                     min_index = i
                     min_date_time = raw_data['datetime']
             return min_index

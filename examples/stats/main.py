@@ -9,7 +9,7 @@ from vnpy.trader.constant import OptionSMonth, Direction
 
 
 
-def show_volatility():
+def show_option_params(param_list):
     engine = BacktestingEngine()
     engine.set_parameters(
         configs = {
@@ -22,7 +22,7 @@ def show_volatility():
         },
         interval="d",
         start=datetime(2017, 12, 1),
-        end=datetime(2020, 7, 1),
+        end=datetime(2021, 10, 1),
         rate=0.3/10000,
         slippage=0,
         size=5000,
@@ -30,20 +30,22 @@ def show_volatility():
         mode=BacktestingMode.BAR
     )
     engine.load_data()
-    #engine.show_option_params(
-    #    param_list=['realized_vol', 'imp_vol', 'spot_price'], 
+
+    engine.show_option_params(
+       param_list=param_list, 
+       call_put='C', 
+       level=-1,
+       s_month_type=OptionSMonth.NEXT_SEASON, 
+       change_pos_day=30)
+
+    #engine.stat_vol(
     #    call_put='C', 
     #    level=-1, 
-    #    s_month_type=OptionSMonth.NEXT_SEASON, 
-    #    change_pos_day=30)
-
-    engine.stat_vol(
-        call_put='C', 
-        level=-1, 
-        s_month_type=OptionSMonth.NEXT_MONTH, 
-        change_pos_day=15)
+    #    s_month_type=OptionSMonth.NEXT_MONTH, 
+    #    change_pos_day=15)
 
 
 
 if __name__ == '__main__':
-    show_volatility()
+    show_option_params(param_list=['realized_vol', 'imp_vol', 'spot_price', 'op_price'])
+    show_option_params(param_list=['imp_vol', 'vol'])

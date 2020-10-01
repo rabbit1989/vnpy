@@ -25,7 +25,7 @@ engine.set_parameters(
     },
     interval="d",
     start=datetime(2017, 12, 1),
-    end=datetime(2020, 7, 1),
+    end=datetime(2021, 9, 1),
     rate=0.3/10000,
     slippage=0,
     size=5000,
@@ -84,21 +84,21 @@ engine.set_parameters(
 #    })
 
 
+engine.add_strategy(
+   ShortImpVolStrategy, 
+   {'spot_symbol': '50etf',
+    'option_level': -1,
+    "s_month_type": OptionSMonth.NEXT_SEASON,
+    'call_put': 'C'
+   })
+
 # engine.add_strategy(
-#     ShortImpVolStrategy, 
+#     ChannelBreakImpVolStrategyV2, 
 #     {'spot_symbol': '50etf',
 #      'option_level': -1,
 #      "s_month_type": OptionSMonth.NEXT_SEASON,
 #      'call_put': 'C'
 #     })
-
-engine.add_strategy(
-    ChannelBreakImpVolStrategyV2, 
-    {'spot_symbol': '50etf',
-     'option_level': -1,
-     "s_month_type": OptionSMonth.NEXT_SEASON,
-     'call_put': 'C'
-    })
 
 
 

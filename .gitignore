@@ -35,3 +35,7 @@ _templates
 
 # Misc
 .DS_Store
+*.png
+*.jpg
+*.html
+*_log

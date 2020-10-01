@@ -46,6 +46,7 @@ class DbBarData(Document):
     symbol: str = StringField()
     exchange: str = StringField()
     datetime: datetime = DateTimeField()
+    update_time: datetime = DateTimeField()
     interval: str = StringField()
 
     volume: float = FloatField()
@@ -54,6 +55,7 @@ class DbBarData(Document):
     high_price: float = FloatField()
     low_price: float = FloatField()
     close_price: float = FloatField()
+    
 
     meta = {
         "indexes": [
@@ -116,6 +118,7 @@ class DbOptionBarData(Document):
     symbol: str = StringField()
     exchange: str = StringField()
     datetime: datetime = DateTimeField()
+    update_time: datetime = DateTimeField()
     interval: str = StringField()
     options: dict = DictField()
 
