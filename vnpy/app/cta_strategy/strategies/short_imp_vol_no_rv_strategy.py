@@ -239,7 +239,7 @@ class ShortImpVolNoRvStrategy(CtaTemplate):
                 self.cover(option_symbol, None, -self.pos_dict[option_symbol], order_type=OrderType.MARKET)
                 self.sell(self.spot_symbol, None, self.pos_dict[self.spot_symbol], order_type=OrderType.MARKET)
             
-            if pos_state != PosState.Short and abs(rv) > 0.00001 and local_min is True:
+            if pos_state != PosState.Short and local_min is True:
                 print('=========================================')
                 print('======short_volatility======= rv: {:.3f}, iv: {:.3f}, local_min: {}'.format(rv, iv, local_min))    
                 # 如果空仓且rv小于iv且iv低于k日线, 则卖出波动率                    
