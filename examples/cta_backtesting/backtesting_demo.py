@@ -10,6 +10,7 @@ from vnpy.app.cta_strategy.strategies.realized_vol_strategy import RealizedVolSt
 from vnpy.app.cta_strategy.strategies.channel_break_vol_strategy import ChannelBreakVolStrategy
 from vnpy.app.cta_strategy.strategies.channel_break_imp_vol_strategy_v2 import ChannelBreakImpVolStrategyV2
 from vnpy.app.cta_strategy.strategies.short_imp_vol_strategy import ShortImpVolStrategy
+from vnpy.app.cta_strategy.strategies.short_imp_vol_no_rv_strategy import ShortImpVolNoRvStrategy
 from vnpy.trader.constant import OptionSMonth, Direction
 
 
@@ -84,13 +85,24 @@ engine.set_parameters(
 #    })
 
 
+############### 最近在用的策略 ##################
+# engine.add_strategy(
+#     ShortImpVolStrategy, 
+#     {'spot_symbol': '50etf',
+#      'option_level': -1,
+#      "s_month_type": OptionSMonth.NEXT_SEASON,
+#      'call_put': 'C'
+#     })
+##############################################
+
 engine.add_strategy(
-   ShortImpVolStrategy, 
+   ShortImpVolNoRvStrategy, 
    {'spot_symbol': '50etf',
     'option_level': -1,
     "s_month_type": OptionSMonth.NEXT_SEASON,
     'call_put': 'C'
    })
+
 
 # engine.add_strategy(
 #     ChannelBreakImpVolStrategyV2, 
